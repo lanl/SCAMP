@@ -1,0 +1,4 @@
+name = "SCAMP"
+uuid = "82e157ea-edde-4958-99c6-c875ec25cf44"
+authors = ["Scott Lawrence <srlawrence@lanl.gov>"]
+version = "0.1.0"
