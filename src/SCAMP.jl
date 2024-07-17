@@ -1,7 +1,11 @@
 module SCAMP
 
+export solve
+
 include("programs.jl")
 include("ipm.jl")
-include("simplex.jl")
+
+using .Programs
+using .IPM
 
 end

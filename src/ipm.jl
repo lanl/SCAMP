@@ -2,6 +2,8 @@ module IPM
 
 using ..Programs
 
+export solve
+
 function solve(sdp::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
     y = Programs.initial(sdp)
     N = length(y)
