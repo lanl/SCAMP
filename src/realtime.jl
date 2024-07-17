@@ -6,6 +6,20 @@ struct CorrelatorProgram
     β::Float64
     τ::Vector{Float64}
     Σ::Matrix{Float64}
+    t::Float64
+    σ::Float64
+end
+
+function initial(p::CorrelatorProgram)::Vector{Float64}
+    # TODO
+end
+
+function badness!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64})::Float64
+    # TODO
+end
+
+function barrier!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64})::Float64
+    # TODO
 end
 
 function main()

@@ -4,8 +4,8 @@ using ..Programs
 
 export solve
 
-function solve(sdp::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
-    y = Programs.initial(sdp)
+function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
+    y = Programs.initial(prog)
     N = length(y)
     g = zero(y)
     if verbose
@@ -15,7 +15,7 @@ function solve(sdp::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{F
     # Phase 1
     feasible = false
     for step in 1:100
-        badness = Programs.badness!(g, sdp, y)
+        badness = Programs.badness!(g, prog, y)
         if badness ≤ 0
             feasible = true
             break
@@ -46,7 +46,7 @@ function solve(sdp::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{F
         t = μ*t
     end
 
-    return Programs.objective!(g, sdp, y), y
+    return Programs.objective!(g, prog, y), y
 end
 
 end
