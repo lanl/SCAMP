@@ -2,7 +2,7 @@
 
 ## Structure
 
-In `data/` are stored correlators for a few different theories, used a
+In `data/` are stored correlators for a few different theories, used as
 test-cases for the positivity-constrained analytic continuation.
 
 ## LANL open-source release

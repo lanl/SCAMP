@@ -1,11 +1,20 @@
 using ArgParse
 using LinearAlgebra
+using Statistics: mean
 
 using SCAMP
 import SCAMP: initial, badness!, barrier!, objective!
 
 const dω = 0.01
 const Ω = 30.0
+
+function resample(f, x; K=1000)::Vector{Float64}
+    fs = zeros(K)
+    for k in 1:K
+        fs[k] = f(rand(x,K))
+    end
+    return fs
+end
 
 struct CorrelatorProgram <: ConvexProgram
     β::Float64
@@ -15,10 +24,24 @@ struct CorrelatorProgram <: ConvexProgram
     t::Float64
     σ::Float64
 
-    function CorrelatorProgram(β::Float64, τ::Vector{Float64}, C::Vector{Float64}, Σ::Matrix{Float64}, t::Float64, σ::Float64; p::Float64=0.01)::CorrelatorProgram
-        M = inv(Σ)
-        # TODO regularize and use `p`
-        new(β, τ, C, M, t, σ)
+    function CorrelatorProgram(Cs, t::Float64, σ::Float64; p::Float64=0.01)::CorrelatorProgram
+        C = mean(Cs)
+        β = length(C)
+        τ = collect(1:Float64(β))
+        K = 1000
+        M = zeros((β,β))
+        for n in 1:β
+            M[n,n] = 1.0
+        end
+        xs = resample(Cs) do Cs
+            C′ = mean(Cs)
+            v = C′ - C
+            return v' * M * v
+        end
+        sort!(xs)
+        x = xs[round(Int,(1-p)*K)]
+        M ./= x
+        new(Float64(β), τ, C, M, t, σ)
     end
 end
 
@@ -151,18 +174,23 @@ function main()
         end
         parse_args(s)
     end
-    cor, cov = let
-        map(s -> Meta.parse(s) |> eval, readlines(args["correlator"]))
+    cors = let
+        open(args["correlator"]) do f
+            cors = Vector{Vector{Float64}}()
+            for l in readlines(f)
+                v = eval(Meta.parse(l))
+                if !isnothing(v)
+                    push!(cors, v)
+                end
+            end
+            cors
+        end
     end
-    β = length(cor)
-    τ = collect(1.0:(β÷2))
-    C = cor[1:(β÷2)]
-    Σ = cov[1:(β÷2),1:(β÷2)]
    
     t = 0.0
     σ = 1.0
-    p = CorrelatorProgram(Float64(β), τ, C, Σ, t, σ)
-    solve(primal(p))
+    p = CorrelatorProgram(cors, t, σ)
+    println(solve(primal(p)))
 end
 
 main()
