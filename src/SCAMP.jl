@@ -1,7 +1,9 @@
 module SCAMP
 
 export solve
-export initial, badness!, barrier!
+export initial, badness!, barrier!, objective!
+
+export ConvexProgram
 
 include("programs.jl")
 include("simplex.jl")

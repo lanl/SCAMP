@@ -1,7 +1,7 @@
 module Programs
 
 export ConvexProgram, LinearProgram
-export initial, badness!, barrier!
+export initial, badness!, barrier!, objective!
 
 abstract type ConvexProgram end
 
@@ -13,5 +13,6 @@ end
 function initial end
 function badness! end
 function barrier! end
+function objective! end
 
 end

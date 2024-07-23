@@ -2,26 +2,28 @@ using ArgParse
 using LinearAlgebra
 
 using SCAMP
+import SCAMP: initial, badness!, barrier!, objective!
 
 const dω = 0.01
 const Ω = 30.0
 
-struct CorrelatorProgram
+struct CorrelatorProgram <: ConvexProgram
     β::Float64
     τ::Vector{Float64}
     C::Vector{Float64}
     M::Matrix{Float64}
     t::Float64
     σ::Float64
+
+    function CorrelatorProgram(β::Float64, τ::Vector{Float64}, C::Vector{Float64}, Σ::Matrix{Float64}, t::Float64, σ::Float64; p::Float64=0.01)::CorrelatorProgram
+        M = inv(Σ)
+        # TODO regularize and use `p`
+        new(β, τ, C, M, t, σ)
+    end
 end
 
-struct PrimalCorrelatorProgram
+struct PrimalCorrelatorProgram <: ConvexProgram
     cp::CorrelatorProgram
-end
-
-function CorrelatorProgram(β::Float64, τ::Vector{Float64}, C::Vector{Float64}, Σ::Matrix{Float64}, t::Float64, σ::Float64; p::Float64=0.01)
-    M = inv(Σ)
-    # TODO
 end
 
 function primal(p::CorrelatorProgram)::PrimalCorrelatorProgram
@@ -33,30 +35,62 @@ function initial(p::PrimalCorrelatorProgram)::Vector{Float64}
     return rand(length(ωs))
 end
 
-function objective!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Vector{Float64}
+function objective!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     ωs = 0:dω:Ω
-    # TODO
+    r = 0.
+    for (i,ω) in enumerate(ωs)
+        g[i] = -2 * sin(ω*p.cp.t) * sinh(p.cp.β*ω/2) * exp(-ω^2 * p.cp.σ^2 / 2)
+        r += ρ[i] * g[i]
+    end
+    return r
 end
 
 function badness!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     ωs = 0:dω:Ω
     r = 0.
+    g .= 0
     # Positivity
-    for (ω, ρω) in zip(ωs,ρ)
-        # TODO
+    for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
+        if ρω < 0
+            g[k] += -1.
+            r += -ρω
+        end
     end
     # Measurements
-    # TODO
+    for (i,(τ,C)) in enumerate(zip(p.cp.τ,p.cp.C))
+        cor = 0.
+        dcor = zero(g)
+        for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
+            dcor[k] = cosh(ω * (p.cp.β/2 - τ))
+            cor += dcor[k] * ρω
+        end
+        # TODO
+    end
     return r
 end
 
 function barrier!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     ωs = 0:dω:Ω
-    for (ω, ρω) in zip(ωs,ρ)
-        # TODO
+    g .= 0
+    r = 0.
+    # Positivity
+    for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
+        if ρω < 0
+            return Inf
+        end
+        g[k] += -1/ρω
+        r += -log(ρω)
     end
     # Measurements
-    # TODO
+    for (i,(τ,C)) in enumerate(zip(p.cp.τ,p.cp.C))
+        cor = 0.
+        dcor = zero(g)
+        for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
+            dcor[k] = cosh(ω * (p.cp.β/2 - τ))
+            cor += dcor[k] * ρω
+        end
+        # TODO
+    end
     return r
 end
 
@@ -118,12 +152,17 @@ function main()
         parse_args(s)
     end
     cor, cov = let
-        lines = readlines(args["correlator"])
+        map(s -> Meta.parse(s) |> eval, readlines(args["correlator"]))
     end
-    
-    # TODO construct the program
-
-    solve(p)
+    β = length(cor)
+    τ = collect(1.0:(β÷2))
+    C = cor[1:(β÷2)]
+    Σ = cov[1:(β÷2),1:(β÷2)]
+   
+    t = 0.0
+    σ = 1.0
+    p = CorrelatorProgram(Float64(β), τ, C, Σ, t, σ)
+    solve(primal(p))
 end
 
 main()
