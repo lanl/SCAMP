@@ -14,20 +14,6 @@ function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{
     end
 
     # Phase 1
-    if false
-        feasible = false
-        for step in 1:10000
-            badness = Programs.badness!(g, prog, y)
-            println(step, "     ", badness)
-            if badness ≤ 0
-                feasible = true
-                break
-            end
-            for n in 1:N
-                y[n] -= 1e-2 * g[n]
-            end
-        end
-    end
     badness = minimize!(GradientDescent, y) do g, y
         return Programs.badness!(g, prog, y)
     end
