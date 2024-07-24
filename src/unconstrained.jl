@@ -57,8 +57,11 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
         end
         α = 1.
         r = at!(α)
+        while r > r₀
+            α /= 2
+            r = at!(α)
+        end
 
-        # TODO handle Inf correctly
         while true
             r′ = at!(α/2)
             if r′ < r

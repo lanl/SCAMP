@@ -83,9 +83,9 @@ function badness!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
         if ρω < 0
             if !isnothing(g)
-                g[k] += -1.
+                g[k] += -1. * dω
             end
-            r += -ρω
+            r += -ρω * dω
         end
     end
     # Measurements
@@ -125,9 +125,9 @@ function barrier!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
             return Inf
         end
         if !isnothing(g)
-            g[k] += -1/ρω
+            g[k] += -1/ρω * dω
         end
-        r += -log(ρω)
+        r += -log(ρω) * dω
     end
     # Measurements
     cor = zeros(β)
@@ -147,7 +147,7 @@ function barrier!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     r += -log(1-err)
     if !isnothing(g)
         for (k, ω) in enumerate(ωs)
-            g[k] += -(2 * v' * p.cp.M * dcor[:,k])/(1-err)
+            g[k] += (2 * v' * p.cp.M * dcor[:,k])/(1-err)
         end
     end
     return r
@@ -240,6 +240,23 @@ function main()
             ρ′[n] += ϵ
             bad′ = badness!(g′, p, ρ′)
             println((bad′ - bad)/ϵ - g[n])
+        end
+        return
+    end
+
+    if false
+        # Check derivatives of barrier!
+        p = primal(CorrelatorProgram(cors, 0.0, 1.0))
+        ρ = solve(p; verbose=true)[2]
+        g = zero(ρ)
+        g′ = zero(ρ)
+        bar = barrier!(g, p, ρ)
+        for n in 1:length(ρ)
+            ϵ = ρ[n] * 1e-4
+            ρ′ = copy(ρ)
+            ρ′[n] += ϵ
+            bar′ = barrier!(g′, p, ρ′)
+            println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n], " ", log(ρ[n]))
         end
         return
     end
