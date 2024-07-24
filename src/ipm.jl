@@ -32,9 +32,24 @@ function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{
     t = t₀
     while t < 1/ϵ
         # Center.
-        for step in 1:100
+        v = minimize!(LineSearch, y) do g, y
+            if isnothing(g)
+                gobj, gbar = nothing, nothing
+            else
+                gobj, gbar = zero(g), zero(g)
+            end
+            obj = Programs.objective!(gobj, prog, y)
+            bar = Programs.barrier!(gbar, prog, y)
+            r = obj + bar/t
+            if !isnothing(g)
+                for n in 1:N
+                    g[n] = gobj[n] + gbar[n]/t
+                end
+            end
+            return r
         end
         if verbose
+            println(t, " ", v)
         end
         t = μ*t
     end

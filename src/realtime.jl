@@ -61,11 +61,14 @@ function initial(p::PrimalCorrelatorProgram)::Vector{Float64}
     return rand(length(ωs))
 end
 
-function objective!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
+function objective!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     r = 0.
     for (i,ω) in enumerate(ωs)
-        g[i] = -2 * sin(ω*p.cp.t) * exp(-ω^2 * p.cp.σ^2 / 2) * dω
-        r += ρ[i] * g[i]
+        coef = -2 * sin(ω*p.cp.t) * exp(-ω^2 * p.cp.σ^2 / 2) * dω
+        if !isnothing(g)
+            g[i] = coef
+        end
+        r += ρ[i] * coef
     end
     return r
 end
@@ -110,25 +113,30 @@ function badness!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     return r
 end
 
-function barrier!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
-    g .= 0
+function barrier!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
+    β = length(p.cp.C)
+    if !isnothing(g)
+        g .= 0
+    end
     r = 0.
     # Positivity
     for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
         if ρω < 0
             return Inf
         end
-        g[k] += -1/ρω
+        if !isnothing(g)
+            g[k] += -1/ρω
+        end
         r += -log(ρω)
     end
     # Measurements
+    cor = zeros(β)
+    dcor = zeros((β,length(ωs)))
     for (i,(τ,C)) in enumerate(zip(p.cp.τ,p.cp.C))
-        cor = 0.
-        dcor = zero(g)
         for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
             #dcor[i,k] = cosh(ω * (p.cp.β/2 - τ)) / sinh(p.cp.β*ω/2)
             dcor[i,k] = (exp(-ω*τ) + exp(-ω * (p.cp.β -τ))) / (1 - exp(-ω*p.cp.β)) * dω
-            cor += dcor[k] * ρω
+            cor[i] += dcor[i,k] * ρω
         end
     end
     v = cor - p.cp.C
@@ -137,8 +145,10 @@ function barrier!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Flo
         return Inf
     end
     r += -log(1-err)
-    for (k, ω) in enumerate(ωs)
-        g[k] += -(2 * v' * p.cp.M * dcor[:,k])/(1-err)
+    if !isnothing(g)
+        for (k, ω) in enumerate(ωs)
+            g[k] += -(2 * v' * p.cp.M * dcor[:,k])/(1-err)
+        end
     end
     return r
 end
@@ -147,7 +157,7 @@ function initial(p::CorrelatorProgram)::Vector{Float64}
     return rand(length(p.τ)+1)
 end
 
-function objective!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64})::Float64
+function objective!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     # Unpack
     μ, ℓ = y[1], y[2:end]
     # TODO
@@ -158,7 +168,7 @@ function λ!(gℓ::Vector{Float64}, p::CorrelatorProgram, ℓ::Vector{Float64}, 
     return 0.0
 end
 
-function badness!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64})::Float64
+function badness!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     # Unpack
     μ, ℓ = y[1], y[2:end]
     g .= 0
@@ -174,7 +184,7 @@ function badness!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64}):
     return r
 end
 
-function barrier!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64})::Float64
+function barrier!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     # Unpack
     μ, ℓ = y[1], y[2:end]
     # Integrate the logarithm.
@@ -238,7 +248,8 @@ function main()
     σ = 1.0
     for t in 0:.1:10
         p = CorrelatorProgram(cors, t, σ)
-        println(solve(primal(p)))
+        lo = solve(primal(p); verbose=true)[1]
+        println("$t  $lo")
     end
 end
 
