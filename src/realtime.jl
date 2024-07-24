@@ -27,8 +27,9 @@ struct CorrelatorProgram <: ConvexProgram
     M::Matrix{Float64}
     t::Float64
     σ::Float64
+    sgn::Float64
 
-    function CorrelatorProgram(Cs, t::Float64, σ::Float64; p::Float64=0.01)::CorrelatorProgram
+    function CorrelatorProgram(Cs, t::Float64, σ::Float64, sgn::Float64; p::Float64=0.01)::CorrelatorProgram
         C = mean(Cs)
         β = length(C)
         τ = collect(1:Float64(β))
@@ -45,7 +46,7 @@ struct CorrelatorProgram <: ConvexProgram
         sort!(xs)
         x = xs[round(Int,(1-p)*K)]
         M ./= x
-        new(Float64(β), τ, C, M, t, σ)
+        new(Float64(β), τ, C, M, t, σ, sgn)
     end
 end
 
@@ -70,7 +71,7 @@ function objective!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
         end
         r += ρ[i] * coef
     end
-    return r
+    return r * p.cp.sgn
 end
 
 function badness!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
@@ -264,9 +265,11 @@ function main()
     # Solve
     σ = 1.0
     for t in 0:.1:10
-        p = CorrelatorProgram(cors, t, σ)
-        lo = solve(primal(p); verbose=true)[1]
-        println("$t  $lo")
+        plo = CorrelatorProgram(cors, t, σ, 1.)
+        phi = CorrelatorProgram(cors, t, σ, -1.)
+        lo = solve(primal(plo); verbose=false)[1]
+        hi = solve(primal(phi); verbose=false)[1]
+        println("$t  $lo $hi")
     end
 end
 
