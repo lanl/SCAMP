@@ -47,7 +47,7 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
     N = length(y)
     ∇::Vector{Float64} = zero(y)
     y′::Vector{Float64} = zero(y)
-    for step in 1:100000
+    for step in 1:100
         r₀ = f!(∇, y)
         function at!(α::Float64)::Float64
             for n in 1:N
