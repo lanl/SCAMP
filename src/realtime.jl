@@ -6,8 +6,11 @@ using Statistics: mean
 using SCAMP
 import SCAMP: initial, badness!, barrier!, objective!
 
-const dω = 0.01
-const Ω = 10.0
+#const dω = 0.02
+#const Ω = 20.0
+const dω = 0.1
+const Ω = 8.0
+const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
     fs = zeros(K)
@@ -55,29 +58,30 @@ function primal(p::CorrelatorProgram)::PrimalCorrelatorProgram
 end
 
 function initial(p::PrimalCorrelatorProgram)::Vector{Float64}
-    ωs = dω:dω:Ω
     return rand(length(ωs))
 end
 
 function objective!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
-    ωs = dω:dω:Ω
     r = 0.
     for (i,ω) in enumerate(ωs)
-        g[i] = -2 * sin(ω*p.cp.t) * exp(-ω^2 * p.cp.σ^2 / 2)
+        g[i] = -2 * sin(ω*p.cp.t) * exp(-ω^2 * p.cp.σ^2 / 2) * dω
         r += ρ[i] * g[i]
     end
     return r
 end
 
-function badness!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
+function badness!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     β = length(p.cp.C)
-    ωs = dω:dω:Ω
     r = 0.
-    g .= 0
+    if !isnothing(g)
+        g .= 0
+    end
     # Positivity
     for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
         if ρω < 0
-            g[k] += -1.
+            if !isnothing(g)
+                g[k] += -1.
+            end
             r += -ρω
         end
     end
@@ -87,7 +91,7 @@ function badness!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Flo
     for (i,τ) in enumerate(p.cp.τ)
         for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
             #dcor[i,k] = cosh(ω * (p.cp.β/2 - τ)) / sinh(p.cp.β*ω/2)
-            dcor[i,k] = (exp(-ω*τ) + exp(-ω * (p.cp.β -τ))) / (1 - exp(-ω*p.cp.β))
+            dcor[i,k] = (exp(-ω*τ) + exp(-ω * (p.cp.β -τ))) / (1 - exp(-ω*p.cp.β)) * dω
             cor[i] += dcor[i,k] * ρω
         end
     end
@@ -95,15 +99,18 @@ function badness!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Flo
     err = v' * p.cp.M * v
     if err > 1
         r += err-1
-        for (k, ω) in enumerate(ωs)
-            g[k] += 2 * v' * p.cp.M * dcor[:,k]
+        if !isnothing(g)
+            for (k, ω) in enumerate(ωs)
+                for i in 1:β, j in 1:β
+                    g[k] += 2 * v'[i] * p.cp.M[i,j] * dcor[j,k]
+                end
+            end
         end
     end
     return r
 end
 
 function barrier!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
-    ωs = dω:dω:Ω
     g .= 0
     r = 0.
     # Positivity
@@ -120,7 +127,7 @@ function barrier!(g::Vector{Float64}, p::PrimalCorrelatorProgram, ρ::Vector{Flo
         dcor = zero(g)
         for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
             #dcor[i,k] = cosh(ω * (p.cp.β/2 - τ)) / sinh(p.cp.β*ω/2)
-            dcor[i,k] = (exp(-ω*τ) + exp(-ω * (p.cp.β -τ))) / (1 - exp(-ω*p.cp.β))
+            dcor[i,k] = (exp(-ω*τ) + exp(-ω * (p.cp.β -τ))) / (1 - exp(-ω*p.cp.β)) * dω
             cor += dcor[k] * ρω
         end
     end
@@ -231,7 +238,7 @@ function main()
     σ = 1.0
     for t in 0:.1:10
         p = CorrelatorProgram(cors, t, σ)
-        #println(solve(primal(p)))
+        println(solve(primal(p)))
     end
 end
 

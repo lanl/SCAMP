@@ -2,3 +2,6 @@ name = "SCAMP"
 uuid = "82e157ea-edde-4958-99c6-c875ec25cf44"
 authors = ["Scott Lawrence <srlawrence@lanl.gov>"]
 version = "0.1.0"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

@@ -1,33 +1,73 @@
+# Unconstrained optimization routines for convex functions.
+
 module UnconstrainedOptimization
 
-# Gradient descent with backtracking line search
-struct GradientDescent
-    α₀::Float64
-    τ::Float64
-    c::Float64
-end
+export GradientDescent, LineSearch
+export minimize!
 
-function GradientDescent()
-    return GradientDescent(1, 0.5, 0.5)
+using LinearAlgebra
+
+# Naive gradient descent
+struct GradientDescent
 end
 
 function (gd::GradientDescent)(f!, y::Vector{Float64})::Float64
-    ∇ = zero(y)
-    ∇′ = zero(y)
-    y′ = zero(y)
-    # TODO when to terminate gradient descent?
+    N = length(y)
+    δ = 0.01
+    ∇::Vector{Float64} = zero(y)
+    y′::Vector{Float64} = zero(y)
     for step in 1:100
-        α = bls.α₀
-        r = f!(∇, y)
-        m = - ∇ ⋅ ∇
-        t = - bls.c * m
-        y′ = y - α * ∇
-        r′ = f!(∇′, y′)
-        while r - r′ < α * t
-            α *= bls.τ
-            y′ = y - α * ∇
-            r′ = f!(∇′, y′)
+        r₀ = f!(nothing, y)
+        for k in 1:100
+            f!(∇, y)
+            for n in 1:N
+                y[n] -= δ * ∇[n]
+            end
         end
+        r = f!(nothing, y)
+        if r ≥ r₀
+            return r
+        end
+    end
+    return f!(∇, y)[1]
+end
+
+# Gradient descent with line search
+struct LineSearch
+    α₀::Float64
+    ϵ::Float64
+end
+
+function LineSearch()
+    return LineSearch(1, 1e-6)
+end
+
+function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
+    # TODO when to terminate gradient descent?
+    N = length(y)
+    ∇::Vector{Float64} = zero(y)
+    y′::Vector{Float64} = zero(y)
+    for step in 1:100000
+        r₀ = f!(∇, y)
+        function at!(α::Float64)::Float64
+            for n in 1:N
+                y′[n] = y[n] - α * ∇[n]
+            end
+            return f!(nothing, y′)
+        end
+        α = 1.
+        r = at!(α)
+
+        while true
+            r′ = at!(α/2)
+            if r′ < r
+                r = r′
+                α /= 2
+            else
+                break
+            end
+        end
+        y′ = y - α * ∇
         y .= y′
     end
     return f!(∇, y)[1]
@@ -37,6 +77,10 @@ struct BFGS
 end
 
 struct LBFGS
+end
+
+function minimize!(f!, alg, y::Vector{Float64})::Float64
+    return alg()(f!, y)
 end
 
 end
