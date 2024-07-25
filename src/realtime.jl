@@ -1,21 +1,22 @@
 using ArgParse
 using LinearAlgebra
 using Random: rand, randn, rand!, randn!
-using Statistics: mean
+using Statistics: mean, cov
 
 using SCAMP
 import SCAMP: initial, badness!, barrier!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.1
-const Ω = 8.0
+const dω = 0.01
+const Ω = 2.0
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
+    N = length(x)
     fs = zeros(K)
     for k in 1:K
-        fs[k] = f(rand(x,K))
+        fs[k] = f(rand(x,N))
     end
     return fs
 end
@@ -30,11 +31,26 @@ struct CorrelatorProgram <: ConvexProgram
     sgn::Float64
 
     function CorrelatorProgram(Cs, t::Float64, σ::Float64, sgn::Float64; p::Float64=0.01)::CorrelatorProgram
+        N = length(Cs)
         C = mean(Cs)
         β = length(C)
+
+        # First extract the covariance matrix.
+        K = 1000
+        cors = zeros((K,β))
+        for k in 1:K
+            cors[k,:] = mean(rand(Cs,N))
+        end
+        Σ = cov(cors)
+        # Regulate.
+        for i in 1:β
+            Σ[i,i] += 1e-20 # TODO
+        end
+
         τ = collect(1:Float64(β))
         K = 1000
         M = zeros((β,β))
+        # TODO
         for n in 1:β
             M[n,n] = 1.0
         end
@@ -74,6 +90,16 @@ function objective!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     return r * p.cp.sgn
 end
 
+function euclidean_correlator(β, τs, ρ)::Vector{Float64}
+    cor = zero(τs)
+    for (i,τ) in enumerate(τs)
+        for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
+            cor[i] += (exp(-ω*τ) + exp(-ω * (β -τ))) / (1 - exp(-ω*β)) * dω * ρω
+        end
+    end
+    return cor
+end
+
 function badness!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     β = length(p.cp.C)
     r = 0.
@@ -99,6 +125,7 @@ function badness!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
             cor[i] += dcor[i,k] * ρω
         end
     end
+
     v = cor - p.cp.C
     err = v' * p.cp.M * v
     if err > 1
@@ -264,12 +291,18 @@ function main()
 
     # Solve
     σ = 1.0
-    for t in 0:.1:10
+    for t in 0:.1:1.
         plo = CorrelatorProgram(cors, t, σ, 1.)
         phi = CorrelatorProgram(cors, t, σ, -1.)
-        lo = solve(primal(plo); verbose=false)[1]
-        hi = solve(primal(phi); verbose=false)[1]
+        lo, ρlo = solve(primal(plo); verbose=false)
+        hi, ρhi = solve(primal(phi); verbose=false)
         println("$t  $lo $hi")
+        #println(ρlo)
+        #println(ρhi)
+        #println(euclidean_correlator(plo.β, plo.τ, ρlo))
+        #println(euclidean_correlator(phi.β, phi.τ, ρhi))
+        #println(plo.C)
+        #println(ρlo)
     end
 end
 
