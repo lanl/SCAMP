@@ -4,11 +4,11 @@ using Random: rand, randn, rand!, randn!
 using Statistics: mean, cov
 
 using SCAMP
-import SCAMP: initial, badness!, barrier!, objective!
+import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.01
+const dω = 0.05
 const Ω = 2.0
 const ωs = dω:dω:Ω
 
@@ -48,13 +48,13 @@ struct CorrelatorProgram <: ConvexProgram
         end
 
         τ = collect(1:Float64(β))
-        K = 1000
+        K = 3000
         M = zeros((β,β))
-        # TODO
+        # TODO use Σ
         for n in 1:β
             M[n,n] = 1.0
         end
-        xs = resample(Cs) do Cs
+        xs = resample(Cs; K=K) do Cs
             C′ = mean(Cs)
             v = C′ - C
             return v' * M * v
@@ -100,22 +100,17 @@ function euclidean_correlator(β, τs, ρ)::Vector{Float64}
     return cor
 end
 
-function badness!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
+function constraints!(cb, p::PrimalCorrelatorProgram, ρ::Vector{Float64})
     β = length(p.cp.C)
-    r = 0.
-    if !isnothing(g)
-        g .= 0
-    end
+    g = zero(ρ)
     # Positivity
-    for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
-        if ρω < 0
-            if !isnothing(g)
-                g[k] += -1. * dω
-            end
-            r += -ρω * dω
-        end
+    for (k,ρω) in enumerate(ρ)
+        g[k] = 1.
+        cb(ρω*dω, g)
+        g[k] = 0.
     end
-    # Measurements
+
+    # Correlator error
     cor = zeros(β)
     dcor = zeros((β,length(ωs)))
     for (i,τ) in enumerate(p.cp.τ)
@@ -128,57 +123,12 @@ function badness!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
 
     v = cor - p.cp.C
     err = v' * p.cp.M * v
-    if err > 1
-        r += err-1
-        if !isnothing(g)
-            for (k, ω) in enumerate(ωs)
-                for i in 1:β, j in 1:β
-                    g[k] += 2 * v'[i] * p.cp.M[i,j] * dcor[j,k]
-                end
-            end
+    for (k, ω) in enumerate(ωs)
+        for i in 1:β, j in 1:β
+            g[k] -= 2 * v'[i] * p.cp.M[i,j] * dcor[j,k]
         end
     end
-    return r
-end
-
-function barrier!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
-    β = length(p.cp.C)
-    if !isnothing(g)
-        g .= 0
-    end
-    r = 0.
-    # Positivity
-    for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
-        if ρω < 0
-            return Inf
-        end
-        if !isnothing(g)
-            g[k] += -1/ρω * dω
-        end
-        r += -log(ρω) * dω
-    end
-    # Measurements
-    cor = zeros(β)
-    dcor = zeros((β,length(ωs)))
-    for (i,(τ,C)) in enumerate(zip(p.cp.τ,p.cp.C))
-        for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
-            #dcor[i,k] = cosh(ω * (p.cp.β/2 - τ)) / sinh(p.cp.β*ω/2)
-            dcor[i,k] = (exp(-ω*τ) + exp(-ω * (p.cp.β -τ))) / (1 - exp(-ω*p.cp.β)) * dω
-            cor[i] += dcor[i,k] * ρω
-        end
-    end
-    v = cor - p.cp.C
-    err = v' * p.cp.M * v
-    if err > 1
-        return Inf
-    end
-    r += -log(1-err)
-    if !isnothing(g)
-        for (k, ω) in enumerate(ωs)
-            g[k] += (2 * v' * p.cp.M * dcor[:,k])/(1-err)
-        end
-    end
-    return r
+    cb(1-err, g)
 end
 
 function initial(p::CorrelatorProgram)::Vector{Float64}
@@ -194,38 +144,6 @@ end
 function λ!(gℓ::Vector{Float64}, p::CorrelatorProgram, ℓ::Vector{Float64}, ω::Float64)::Float64
     # TODO
     return 0.0
-end
-
-function badness!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
-    # Unpack
-    μ, ℓ = y[1], y[2:end]
-    g .= 0
-    r::Float64 = 0.
-    if μ < 0
-        r -= μ
-        g[1] = -1.
-    end
-    # Integrate the negative bits.
-    for ω in 0:dω:Ω
-        # TODO
-    end
-    return r
-end
-
-function barrier!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
-    # Unpack
-    μ, ℓ = y[1], y[2:end]
-    # Integrate the logarithm.
-    if μ ≤ 0
-        return Inf
-    end
-    g .= 0
-    r::Float64 = -log(μ)
-    g[1] = 0. # TODO
-    for ω in 0:dω:Ω
-        # TODO
-    end
-    return r
 end
 
 function main()
@@ -250,31 +168,29 @@ function main()
             cors
         end
     end
+    # Skip
+    cors = cors[1:500:end]
    
     if false
-        # Check derivatives of badness!
-        ϵ = 1e-5
-        t = 0.0
-        σ = 1.0
-        p = primal(CorrelatorProgram(cors, t, σ))
-
+        # Check derivatives of barrier! for Phase1
+        p = SCAMP.IPM.Phase1(primal(CorrelatorProgram(cors, 0.5, 1.0, 1.0)))
         ρ = initial(p)
-        randn!(ρ)
         g = zero(ρ)
         g′ = zero(ρ)
-        bad = badness!(g, p, ρ)
+        bar = SCAMP.IPM.barrier!(g, p, ρ)
         for n in 1:length(ρ)
+            ϵ = 1e-5
             ρ′ = copy(ρ)
             ρ′[n] += ϵ
-            bad′ = badness!(g′, p, ρ′)
-            println((bad′ - bad)/ϵ - g[n])
+            bar′ = SCAMP.IPM.barrier!(g′, p, ρ′)
+            println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n], " ", (bar′-bar)/ϵ)
         end
         return
     end
 
     if false
         # Check derivatives of barrier!
-        p = primal(CorrelatorProgram(cors, 0.0, 1.0))
+        p = primal(CorrelatorProgram(cors, 0.5, 1.0, 1.0))
         ρ = solve(p; verbose=true)[2]
         g = zero(ρ)
         g′ = zero(ρ)
@@ -289,21 +205,25 @@ function main()
         return
     end
 
-    # Solve
-    σ = 1.0
-    for t in 0:.1:1.
-        plo = CorrelatorProgram(cors, t, σ, 1.)
-        phi = CorrelatorProgram(cors, t, σ, -1.)
-        lo, ρlo = solve(primal(plo); verbose=false)
-        hi, ρhi = solve(primal(phi); verbose=false)
-        println("$t  $lo $hi")
-        #println(ρlo)
-        #println(ρhi)
-        #println(euclidean_correlator(plo.β, plo.τ, ρlo))
-        #println(euclidean_correlator(phi.β, phi.τ, ρhi))
-        #println(plo.C)
-        #println(ρlo)
+    if false
+        # Solve primal
+        σ = 1.0
+        for t in 0:.1:1.
+            plo = CorrelatorProgram(cors, t, σ, 1.)
+            phi = CorrelatorProgram(cors, t, σ, -1.)
+            lo, ρlo = solve(primal(plo); verbose=true)
+            hi, ρhi = solve(primal(phi); verbose=true)
+            println("$t  $lo $hi")
+            #println(ρlo)
+            #println(ρhi)
+            #println(euclidean_correlator(plo.β, plo.τ, ρlo))
+            #println(euclidean_correlator(phi.β, phi.τ, ρhi))
+            #println(plo.C)
+            #println(ρlo)
+        end
     end
+
+    # Solve dual
 end
 
 main()

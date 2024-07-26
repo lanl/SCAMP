@@ -15,16 +15,17 @@ function (gd::GradientDescent)(f!, y::Vector{Float64})::Float64
     N = length(y)
     δ = 1e-1
     ∇::Vector{Float64} = zero(y)
+    ∇′::Vector{Float64} = zero(y)
     y′::Vector{Float64} = zero(y)
     for step in 1:1000
-        r₀ = f!(nothing, y)
+        r₀ = f!(∇′, y)
         for k in 1:1000
             f!(∇, y)
             for n in 1:N
                 y[n] -= δ * ∇[n]
             end
         end
-        r = f!(nothing, y)
+        r = f!(∇′, y)
         if r ≥ r₀
             if δ < 1e-4
                 return r
@@ -47,17 +48,17 @@ function LineSearch()
 end
 
 function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
-    # TODO when to terminate gradient descent?
     N = length(y)
     ∇::Vector{Float64} = zero(y)
+    ∇′::Vector{Float64} = zero(y)
     y′::Vector{Float64} = zero(y)
-    for step in 1:300
+    for step in 1:10000
         r₀ = f!(∇, y)
         function at!(α::Float64)::Float64
             for n in 1:N
                 y′[n] = y[n] - α * ∇[n]
             end
-            return f!(nothing, y′)
+            return f!(∇′, y′)
         end
         α = 1.
         r = at!(α)
@@ -74,6 +75,9 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
             else
                 break
             end
+        end
+        if α < 1e-8
+            break
         end
         y′ = y - α * ∇
         y .= y′

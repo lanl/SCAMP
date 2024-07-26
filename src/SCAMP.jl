@@ -1,7 +1,7 @@
 module SCAMP
 
 export solve
-export initial, badness!, barrier!, objective!
+export initial, constraints!, objective!
 
 export ConvexProgram
 

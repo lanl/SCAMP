@@ -1,7 +1,7 @@
 module Programs
 
 export ConvexProgram, LinearProgram
-export initial, badness!, barrier!, objective!
+export initial, constraints!, objective!
 
 abstract type ConvexProgram end
 
@@ -11,8 +11,7 @@ struct DenseLinearProgram
 end
 
 function initial end
-function badness! end
-function barrier! end
+function constraints! end
 function objective! end
 
 end
