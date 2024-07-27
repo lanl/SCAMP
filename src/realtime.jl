@@ -141,6 +141,11 @@ function objective!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     # TODO
 end
 
+function constraints!(cb, p::CorrelatorProgram, y::Vector{Float64})
+    μ, ℓ = y[1], y[2:end]
+    # TODO
+end
+
 function λ!(gℓ::Vector{Float64}, p::CorrelatorProgram, ℓ::Vector{Float64}, ω::Float64)::Float64
     # TODO
     return 0.0
@@ -224,6 +229,14 @@ function main()
     end
 
     # Solve dual
+    σ = 1.0
+    for t in 0:0.1:1.0
+        plo = CorrelatorProgram(cors, t, σ, 1.)
+        phi = CorrelatorProgram(cors, t, σ, -1.)
+        lo = solve(plo; verbose=true)[1]
+        hi = solve(plo; verbose=true)[1]
+        println("$t  $lo $hi")
+    end
 end
 
 main()
