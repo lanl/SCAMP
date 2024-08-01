@@ -326,6 +326,8 @@ end
 
 Debugging ideas:
 
+Why does the primal find an infeasible point?
+
 Why is phase1 unbounded below?
 
 The t=0 case should be doable analytically on symmetry principles.

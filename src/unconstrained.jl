@@ -20,14 +20,19 @@ function (gd::GradientDescent)(f!, y::Vector{Float64})::Float64
     for step in 1:100
         r₀ = f!(∇′, y)
         for k in 1:100
-            f!(∇, y)
+            r = f!(∇, y)
+            y′ .= y
             for n in 1:N
-                y[n] -= δ * ∇[n]
+                y′[n] -= δ * ∇[n]
+            end
+            r′ = f!(∇′, y′)
+            if r′ < r
+                y .= y′
             end
         end
         r = f!(∇′, y)
         if r ≥ r₀
-            if δ < 1e-4
+            if δ < 1e-6
                 return r
             else
                 δ /= 2.
@@ -58,7 +63,7 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
     for step in 1:100000
         r₀ = f!(∇, y)
         if step%100 == 0 && false
-            println("$step   $α    $r₀")
+            println("step=$step   α=$α    r₀=$r₀")
             println(y)
         end
         function at!(α::Float64)::Float64
