@@ -76,7 +76,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=LineSearch, early
     g = zero(y)
 
     μ = 1.5
-    ϵ = 1e-6
+    ϵ = 1e-10
     t₀ = 1.0e-2
 
     t = t₀
@@ -126,13 +126,13 @@ function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{
         solve(Phase1(prog), y′; verbose=verbose, gd=GradientDescent, early=check)
         y = y′[2:end]
     end
+    # Check feasibility
+    if !feasible(prog, y)
+        error("Phase1 solver found infeasible point!")
+    end
 
     if verbose
         println("Performing phase-2 optimization...")
-    end
-    # Check feasibility
-    if !feasible(prog, y)
-        error("Solver found infeasible point!")
     end
     return solve(prog, y; verbose=verbose)
 end

@@ -58,8 +58,8 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
     ∇′::Vector{Float64} = zero(y)
     y′::Vector{Float64} = zero(y)
     α = 1.
-    αmin = 1e-8
-    δmin = 1e-8
+    αmin = 1e-10
+    δmin = 1e-10
     for step in 1:100000
         r₀ = f!(∇, y)
         if step%100 == 0 && false

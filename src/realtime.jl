@@ -85,10 +85,10 @@ function objective!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     r = 0.
     for (i,ω) in enumerate(ωs)
         coef = -2 * sin(ω*p.cp.t) * exp(-ω^2 * p.cp.σ^2 / 2) * dω
-        g[i] = coef
-        r += ρ[i] * coef
+        g[i] = coef * p.cp.sgn
+        r += ρ[i] * coef * p.cp.sgn
     end
-    return r * p.cp.sgn
+    return r
 end
 
 function euclidean_correlator(β, τs, ρ)::Vector{Float64}
@@ -299,7 +299,7 @@ function main()
         for t in 0.2:.2:1.
             plo = CorrelatorProgram(cors, t, σ, 1.)
             phi = CorrelatorProgram(cors, t, σ, -1.)
-            lo, ρlo = solve(primal(plo); verbose=false)
+            lo, ρlo = solve(primal(plo); verbose=true)
             hi, ρhi = solve(primal(phi); verbose=false)
             println("$t  $lo $(-hi)")
             #println(ρlo)
@@ -334,8 +334,6 @@ end
 #=
 
 Debugging ideas:
-
-Why is the true value outside the primal bounds
 
 Solving the "lo" dual problem gives an impossible "lower" bound. This is the
 most serious bug. Imagine holding λ fixed and performing the minimization over
