@@ -46,7 +46,7 @@ struct CorrelatorProgram <: ConvexProgram
         # Regulate.
         maxeig = maximum(eigvals(Σ))
         for i in 1:β
-            Σ[i,i] += 1e-3 * maxeig
+            Σ[i,i] += 1e-4 * maxeig
         end
 
         τ = collect(1:Float64(β))
@@ -347,7 +347,7 @@ function main()
         for t in 0.2:0.2:1.0
             plo = CorrelatorProgram(cors, t, σ, 1.)
             phi = CorrelatorProgram(cors, t, σ, -1.)
-            lo, ylo = solve(plo; verbose=true)
+            lo, ylo = solve(plo; verbose=false)
             if false
                 g = zero(ylo)
                 for ω in 1e-2:1e-2:4
@@ -356,7 +356,7 @@ function main()
                 end
                 # Obtain the minimizing ρ
             end
-            hi, yhi = solve(phi; verbose=true)
+            hi, yhi = solve(phi; verbose=false)
             println("$t  $(-lo) $hi")
             #println("    ", ylo)
         end

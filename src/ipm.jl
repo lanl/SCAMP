@@ -67,7 +67,7 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
     end
 end
 
-function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=LineSearch, early=nothing)::Tuple{Float64, Vector{Float64}}
+function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothing)::Tuple{Float64, Vector{Float64}}
     if !feasible(prog, y)
         error("Initial point was not feasible")
     end

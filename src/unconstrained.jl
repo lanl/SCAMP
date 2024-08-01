@@ -2,7 +2,7 @@
 
 module UnconstrainedOptimization
 
-export GradientDescent, LineSearch
+export GradientDescent, LineSearch, BFGS
 export minimize!
 
 using LinearAlgebra
@@ -101,11 +101,66 @@ end
 struct BFGS
 end
 
-function BFGS()
-    return BFGS()
-end
-
 function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
+    N = length(y)
+    ∇::Vector{Float64} = zero(y)
+    ∇′::Vector{Float64} = zero(y)
+    v::Vector{Float64} = zero(y)
+    d::Vector{Float64} = zero(y)
+    y′::Vector{Float64} = zero(y)
+
+    α = 1.
+    αmin = 1e-10
+    δmin = 1e-10
+
+    # Initial guess of inverse Hessian (just guess the identity).
+    H = zeros(Float64, (N,N))
+    for n in 1:N
+        H[n,n] = 1.0
+    end
+
+    for step in 1:100
+        # Get initial value and gradient.
+        r₀ = f!(∇, y)
+        g = H * ∇
+
+        # Line search
+        function at!(α::Float64)::Float64
+            for n in 1:N
+                y′[n] = y[n] - α * g[n]
+            end
+            return f!(∇′, y′)
+        end
+        r = at!(α)
+        while r > r₀ && α > αmin
+            α /= 2
+            r = at!(α)
+        end
+
+        while α > αmin
+            r′ = at!(α/2)
+            if r′ < r
+                r = r′
+                α /= 2
+            else
+                break
+            end
+        end
+        δ = r₀ - r
+        if α < αmin || δ < δmin
+            break
+        end
+        v .= -α*g
+        y .+= v
+        α *= 10
+
+        f!(∇′, y)
+
+        # Update inverse Hessian.
+        d = ∇′ - ∇
+        H = H + (v' * d + d' * H * d) * (v * v') / (v' * d)^2 - (H * d * v' + v * d' * H) / (v' * d)
+    end
+    return f!(∇, y)[1]
 end
 
 struct LBFGS
