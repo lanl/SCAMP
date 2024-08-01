@@ -199,6 +199,10 @@ function main()
         @add_arg_table s begin
             "-P","--primal"
                 action = :store_true
+            "--skip"
+                required = false
+                default = 1
+                arg_type = Int
             "correlator"
                 required = true
                 arg_type = String
@@ -218,7 +222,7 @@ function main()
         end
     end
     # Skip
-    cors = cors[1:500:end]
+    cors = cors[1:args["skip"]:end]
    
     if false
         # Check derivatives of barrier! for primal Phase1
@@ -310,8 +314,8 @@ function main()
         for t in 0:0.1:1.0
             plo = CorrelatorProgram(cors, t, σ, 1.)
             phi = CorrelatorProgram(cors, t, σ, -1.)
-            lo, ylo = solve(plo; verbose=false)
-            hi, yhi = solve(phi; verbose=false)
+            lo, ylo = solve(plo; verbose=true)
+            hi, yhi = solve(phi; verbose=true)
             println("$t  $lo $(-hi)")
             #println("    ", ylo)
         end
