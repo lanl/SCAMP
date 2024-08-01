@@ -53,9 +53,11 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
     ∇′::Vector{Float64} = zero(y)
     y′::Vector{Float64} = zero(y)
     α = 1.
+    αmin = 1e-8
+    δmin = 1e-8
     for step in 1:100000
         r₀ = f!(∇, y)
-        if step%1000 == 0 && false
+        if step%100 == 0 && false
             println("$step   $α    $r₀")
             println(y)
         end
@@ -66,12 +68,12 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
             return f!(∇′, y′)
         end
         r = at!(α)
-        while r > r₀
+        while r > r₀ && α > αmin
             α /= 2
             r = at!(α)
         end
 
-        while true
+        while α > αmin
             r′ = at!(α/2)
             if r′ < r
                 r = r′
@@ -80,7 +82,8 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
                 break
             end
         end
-        if α < 1e-8
+        δ = r₀ - r
+        if α < αmin || δ < δmin
             break
         end
         y′ = y - α * ∇
