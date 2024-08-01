@@ -8,8 +8,8 @@ import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.02
-const Ω = 5.0
+const dω = 0.05
+const Ω = 2.0
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
@@ -197,6 +197,8 @@ function main()
     args = let
         s = ArgParseSettings()
         @add_arg_table s begin
+            "-P","--primal"
+                action = :store_true
             "correlator"
                 required = true
                 arg_type = String
@@ -286,7 +288,7 @@ function main()
         return
     end
 
-    if false
+    if args["primal"]
         # Solve primal
         σ = 1.0
         for t in 0:.1:1.
@@ -302,17 +304,17 @@ function main()
             #println(plo.C)
             #println(ρlo)
         end
-    end
-
-    # Solve dual
-    σ = 1.0
-    for t in 0:0.1:1.0
-        plo = CorrelatorProgram(cors, t, σ, 1.)
-        phi = CorrelatorProgram(cors, t, σ, -1.)
-        lo, ylo = solve(plo; verbose=false)
-        hi, yhi = solve(phi; verbose=false)
-        println("$t  $lo $(-hi)")
-        #println("    ", ylo)
+    else
+        # Solve dual
+        σ = 1.0
+        for t in 0:0.1:1.0
+            plo = CorrelatorProgram(cors, t, σ, 1.)
+            phi = CorrelatorProgram(cors, t, σ, -1.)
+            lo, ylo = solve(plo; verbose=false)
+            hi, yhi = solve(phi; verbose=false)
+            println("$t  $lo $(-hi)")
+            #println("    ", ylo)
+        end
     end
 end
 
