@@ -8,7 +8,7 @@ import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.05
+const dω = 0.1
 const Ω = 2.0
 const ωs = dω:dω:Ω
 
@@ -186,7 +186,8 @@ function λ!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64}, ω::F
     # K^T ℓ term, with gradient
     for (i,τ) in enumerate(p.τ)
         ℓ = y[1+i]
-        gℓ = cosh(ω * (p.β/2 - τ)) / sinh(p.β * ω / 2)
+        #gℓ = cosh(ω * (p.β/2 - τ)) / sinh(p.β * ω / 2)
+        gℓ = (exp(-ω*τ) + exp(-ω * (p.β -τ))) / (1 - exp(-ω*p.β))
         g[1+i] = gℓ
         r += ℓ * gℓ
     end
@@ -295,12 +296,12 @@ function main()
     if args["primal"]
         # Solve primal
         σ = 1.0
-        for t in 0:.1:1.
+        for t in 0.2:.2:1.
             plo = CorrelatorProgram(cors, t, σ, 1.)
             phi = CorrelatorProgram(cors, t, σ, -1.)
             lo, ρlo = solve(primal(plo); verbose=false)
             hi, ρhi = solve(primal(phi); verbose=false)
-            println("$t  $lo $hi")
+            println("$t  $lo $(-hi)")
             #println(ρlo)
             #println(ρhi)
             #println(euclidean_correlator(plo.β, plo.τ, ρlo))
@@ -311,10 +312,18 @@ function main()
     else
         # Solve dual
         σ = 1.0
-        for t in 0:0.1:1.0
+        for t in 0.2:0.2:1.0
             plo = CorrelatorProgram(cors, t, σ, 1.)
             phi = CorrelatorProgram(cors, t, σ, -1.)
             lo, ylo = solve(plo; verbose=true)
+            if false
+                g = zero(ylo)
+                for ω in 1e-2:1e-2:4
+                    λ = λ!(g, plo, ylo, ω)
+                    println(ω, "   ", λ)
+                end
+                # Obtain the minimizing ρ
+            end
             hi, yhi = solve(phi; verbose=true)
             println("$t  $lo $(-hi)")
             #println("    ", ylo)
@@ -326,7 +335,14 @@ end
 
 Debugging ideas:
 
-Why does the primal find an infeasible point?
+Why is the true value outside the primal bounds
+
+Solving the "lo" dual problem gives an impossible "lower" bound. This is the
+most serious bug. Imagine holding λ fixed and performing the minimization over
+ρ. It _should_ reproduce the the evaluation of the dual objective.
+
+ * If it does not, then we have the wrong dual objective.
+ * If it does, then minimax is somehow violated (!?)
 
 Why is phase1 unbounded below?
 
