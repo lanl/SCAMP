@@ -110,8 +110,8 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
     y′::Vector{Float64} = zero(y)
 
     α = 1.
-    αmin = 1e-10
-    δmin = 1e-10
+    αmin = 1e-12
+    δmin = 1e-12
 
     # Initial guess of inverse Hessian (just guess the identity).
     H = zeros(Float64, (N,N))
@@ -123,6 +123,7 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
         # Get initial value and gradient.
         r₀ = f!(∇, y)
         g = H * ∇
+        g ./= norm(g)
 
         # Line search
         function at!(α::Float64)::Float64
@@ -158,7 +159,9 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
 
         # Update inverse Hessian.
         d = ∇′ - ∇
-        H = H + (v' * d + d' * H * d) * (v * v') / (v' * d)^2 - (H * d * v' + v * d' * H) / (v' * d)
+        den = v' * d
+        #den += 1e-8  # Crude damping
+        H = H + (v' * d + d' * H * d) * (v * v') / den^2 - (H * d * v' + v * d' * H) / den
     end
     return f!(∇, y)[1]
 end

@@ -8,8 +8,8 @@ import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.1
-const Ω = 2.0
+const dω = 0.05
+const Ω = 3.0
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
@@ -46,7 +46,7 @@ struct CorrelatorProgram <: ConvexProgram
         # Regulate.
         maxeig = maximum(eigvals(Σ))
         for i in 1:β
-            Σ[i,i] += 1e-4 * maxeig
+            Σ[i,i] += 1e-5 * maxeig
         end
 
         τ = collect(1:Float64(β))
@@ -348,14 +348,6 @@ function main()
             plo = CorrelatorProgram(cors, t, σ, 1.)
             phi = CorrelatorProgram(cors, t, σ, -1.)
             lo, ylo = solve(plo; verbose=false)
-            if false
-                g = zero(ylo)
-                for ω in 1e-2:1e-2:4
-                    λ = λ!(g, plo, ylo, ω)
-                    println(ω, "   ", λ)
-                end
-                # Obtain the minimizing ρ
-            end
             hi, yhi = solve(phi; verbose=false)
             println("$t  $(-lo) $hi")
             #println("    ", ylo)
