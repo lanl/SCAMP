@@ -60,10 +60,10 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
     α = 1.
     αmin = 1e-10
     δmin = 1e-10
-    for step in 1:100000
+    for step in 1:1000000
         r₀ = f!(∇, y)
-        if step%100 == 0 && false
-            println("step=$step   α=$α    r₀=$r₀")
+        if step%200000 == 0
+            println("   Taking long! step=$step   α=$α    r₀=$r₀")
             println(y)
         end
         function at!(α::Float64)::Float64
@@ -99,6 +99,13 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
 end
 
 struct BFGS
+end
+
+function BFGS()
+    return BFGS()
+end
+
+function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
 end
 
 struct LBFGS

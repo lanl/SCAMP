@@ -77,7 +77,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=LineSearch, early
 
     μ = 1.5
     ϵ = 1e-10
-    t₀ = 1.0e-2
+    t₀ = 1.0e-3
 
     t = t₀
     while t < 1/ϵ

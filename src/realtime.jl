@@ -44,16 +44,20 @@ struct CorrelatorProgram <: ConvexProgram
         end
         Σ = cov(cors)
         # Regulate.
+        maxeig = maximum(eigvals(Σ))
         for i in 1:β
-            Σ[i,i] += 1e-20 # TODO
+            Σ[i,i] += 1e-3 * maxeig
         end
 
         τ = collect(1:Float64(β))
         K = 1000
-        M = zeros((β,β))
-        # TODO use Σ
-        for n in 1:β
-            M[n,n] = 1.0
+        if false
+            M = zeros((β,β))
+            for n in 1:β
+                M[n,n] = 1.0
+            end
+        else
+            M = inv(Σ)
         end
         xs = resample(Cs; K=K) do Cs
             C′ = mean(Cs)
