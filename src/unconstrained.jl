@@ -17,9 +17,9 @@ function (gd::GradientDescent)(f!, y::Vector{Float64})::Float64
     ∇::Vector{Float64} = zero(y)
     ∇′::Vector{Float64} = zero(y)
     y′::Vector{Float64} = zero(y)
-    for step in 1:1000
+    for step in 1:100
         r₀ = f!(∇′, y)
-        for k in 1:1000
+        for k in 1:100
             f!(∇, y)
             for n in 1:N
                 y[n] -= δ * ∇[n]
@@ -52,15 +52,19 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
     ∇::Vector{Float64} = zero(y)
     ∇′::Vector{Float64} = zero(y)
     y′::Vector{Float64} = zero(y)
-    for step in 1:10000
+    α = 1.
+    for step in 1:100000
         r₀ = f!(∇, y)
+        if step%1000 == 0 && false
+            println("$step   $α    $r₀")
+            println(y)
+        end
         function at!(α::Float64)::Float64
             for n in 1:N
                 y′[n] = y[n] - α * ∇[n]
             end
             return f!(∇′, y′)
         end
-        α = 1.
         r = at!(α)
         while r > r₀
             α /= 2
@@ -76,12 +80,12 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
                 break
             end
         end
-        println("step=$step;   ", norm(∇), "   ", α)
         if α < 1e-8
             break
         end
         y′ = y - α * ∇
         y .= y′
+        α *= 10
     end
     return f!(∇, y)[1]
 end

@@ -8,8 +8,8 @@ import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.05
-const Ω = 2.0
+const dω = 0.02
+const Ω = 5.0
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
@@ -138,7 +138,7 @@ end
 
 function objective!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     # Unpack
-    μ, ℓ = y[1], y[2:end]
+    μ, ℓ = y[1], @view(y[2:end])
     g .= 0.0
     r = 0.0
 
@@ -276,12 +276,12 @@ function main()
         g = zero(y)
         g′ = zero(y)
         for n in 1:length(y)
-            ϵ = 1e-4
+            ϵ = 1e-6
             r = objective!(g, p, y)
             y′ = copy(y)
             y′[n] += ϵ
             r′ = objective!(g′, p, y′)
-            println((r′-r)/ϵ, "     ", g[n])
+            println((r′-r)/ϵ - g[n], "            ", (r′-r)/ϵ, "     ", g[n])
         end
         return
     end
@@ -309,8 +309,8 @@ function main()
     for t in 0:0.1:1.0
         plo = CorrelatorProgram(cors, t, σ, 1.)
         phi = CorrelatorProgram(cors, t, σ, -1.)
-        lo, ylo = solve(plo; verbose=true)
-        hi, yhi = solve(phi; verbose=true)
+        lo, ylo = solve(plo; verbose=false)
+        hi, yhi = solve(phi; verbose=false)
         println("$t  $lo $(-hi)")
         #println("    ", ylo)
     end
@@ -320,7 +320,7 @@ end
 
 Debugging ideas:
 
-Why is the minimization so fast?
+Why is phase1 unbounded below?
 
 The t=0 case should be doable analytically on symmetry principles.
 

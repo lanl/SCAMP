@@ -67,7 +67,7 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
     end
 end
 
-function solve(prog::ConvexProgram, y; verbose::Bool=false, early=nothing)::Tuple{Float64, Vector{Float64}}
+function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=LineSearch, early=nothing)::Tuple{Float64, Vector{Float64}}
     if !feasible(prog, y)
         error("Initial point was not feasible")
     end
@@ -77,12 +77,12 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, early=nothing)::Tupl
 
     μ = 1.5
     ϵ = 1e-6
-    t₀ = 1.
+    t₀ = 1.0e-2
 
     t = t₀
     while t < 1/ϵ
         # Center.
-        v = minimize!(LineSearch, y) do g, y
+        v = minimize!(gd, y) do g, y
             gobj, gbar = zero(g), zero(g)
             obj = objective!(gobj, prog, y)
             bar = barrier!(gbar, prog, y)
@@ -123,7 +123,7 @@ function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{
         function check(y)
             return feasible(prog, y[2:end])
         end
-        solve(Phase1(prog), y′; verbose=false, early=check)
+        solve(Phase1(prog), y′; verbose=verbose, gd=GradientDescent, early=check)
         y = y′[2:end]
     end
 
