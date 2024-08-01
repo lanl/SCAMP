@@ -163,6 +163,10 @@ function constraints!(cb, p::CorrelatorProgram, y::Vector{Float64})
         λ = λ!(dλ, p, y, ω)
         cb(dω*λ, dλ)
     end
+    dμ = zero(y)
+    dμ[1] = 1.0
+    μ = y[1]
+    cb(μ, dμ)
 end
 
 function λ!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64}, ω::Float64)::Float64
@@ -268,8 +272,8 @@ function main()
     for t in 0:0.1:1.0
         plo = CorrelatorProgram(cors, t, σ, 1.)
         phi = CorrelatorProgram(cors, t, σ, -1.)
-        lo = solve(plo; verbose=true)[1]
-        hi = solve(plo; verbose=true)[1]
+        lo = solve(plo; verbose=false)[1]
+        hi = solve(phi; verbose=false)[1]
         println("$t  $lo $hi")
     end
 end

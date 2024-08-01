@@ -121,9 +121,9 @@ function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{
         phase1 = Phase1(prog)
         y′ = initial(phase1)
         function check(y)
-            return feasible(prog, y)
+            return feasible(prog, y[2:end])
         end
-        solve(Phase1(prog), y′; verbose=true, early=check)
+        solve(Phase1(prog), y′; verbose=false, early=check)
         y = y′[2:end]
     end
 
