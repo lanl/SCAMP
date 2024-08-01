@@ -64,6 +64,7 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
         r = at!(α)
         while r > r₀
             α /= 2
+            #println("    shrinking α to $α, since $r > $r₀")
             r = at!(α)
         end
 
@@ -72,10 +73,12 @@ function (gd::LineSearch)(f!, y::Vector{Float64})::Float64
             if r′ < r
                 r = r′
                 α /= 2
+                #println("     shrinking α to $α, since $r′ < $r")
             else
                 break
             end
         end
+        #println("step=$step;   ", norm(∇), "   ", α)
         if α < 1e-8
             break
         end

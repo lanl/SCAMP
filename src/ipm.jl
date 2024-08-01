@@ -130,6 +130,10 @@ function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{
     if verbose
         println("Performing phase-2 optimization...")
     end
+    # Check feasibility
+    if !feasible(prog, y)
+        error("Solver found infeasible point!")
+    end
     return solve(prog, y; verbose=verbose)
 end
 

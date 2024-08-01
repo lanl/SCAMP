@@ -85,9 +85,7 @@ function objective!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     r = 0.
     for (i,ω) in enumerate(ωs)
         coef = -2 * sin(ω*p.cp.t) * exp(-ω^2 * p.cp.σ^2 / 2) * dω
-        if !isnothing(g)
-            g[i] = coef
-        end
+        g[i] = coef
         r += ρ[i] * coef
     end
     return r * p.cp.sgn
@@ -108,7 +106,7 @@ function constraints!(cb, p::PrimalCorrelatorProgram, ρ::Vector{Float64})
     g = zero(ρ)
     # Positivity
     for (k,ρω) in enumerate(ρ)
-        g[k] = 1.
+        g[k] = dω
         cb(ρω*dω, g)
         g[k] = 0.
     end
@@ -154,6 +152,10 @@ function objective!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     g[1] += ℓMinvℓ / (4 * μ^2)
     gℓ = -2 * p.Minv * ℓ / (4*μ)
     g[2:end] .= gℓ
+
+    # We're maximizing, not minimizing.
+    r *= -1
+    g .*= -1
     return r
 end
 
@@ -161,6 +163,7 @@ function constraints!(cb, p::CorrelatorProgram, y::Vector{Float64})
     dλ = zero(y)
     for ω in dω:dω:Ω
         λ = λ!(dλ, p, y, ω)
+        dλ .*= dω
         cb(dω*λ, dλ)
     end
     dμ = zero(y)
@@ -174,7 +177,7 @@ function λ!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64}, ω::F
     μ = y[1]
 
     # (\mathcal K) term. No gradient
-    r = -2 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
+    r = p.sgn * -2 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
 
     # Constant (in ℓ) term, with gradient.
     g[1] = -2 * (p.C' * p.M * p.C)
@@ -216,7 +219,7 @@ function main()
     cors = cors[1:500:end]
    
     if false
-        # Check derivatives of barrier! for Phase1
+        # Check derivatives of barrier! for primal Phase1
         p = SCAMP.IPM.Phase1(primal(CorrelatorProgram(cors, 0.5, 1.0, 1.0)))
         ρ = initial(p)
         g = zero(ρ)
@@ -224,6 +227,23 @@ function main()
         bar = SCAMP.IPM.barrier!(g, p, ρ)
         for n in 1:length(ρ)
             ϵ = 1e-5
+            ρ′ = copy(ρ)
+            ρ′[n] += ϵ
+            bar′ = SCAMP.IPM.barrier!(g′, p, ρ′)
+            println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n], " ", (bar′-bar)/ϵ)
+        end
+        return
+    end
+
+    if false
+        # Check derivatives of barrier! for dual Phase1
+        p = SCAMP.IPM.Phase1(CorrelatorProgram(cors, 0.5, 1.0, 1.0))
+        ρ = initial(p)
+        g = zero(ρ)
+        g′ = zero(ρ)
+        bar = SCAMP.IPM.barrier!(g, p, ρ)
+        for n in 1:length(ρ)
+            ϵ = 1e-6
             ρ′ = copy(ρ)
             ρ′[n] += ϵ
             bar′ = SCAMP.IPM.barrier!(g′, p, ρ′)
@@ -245,6 +265,23 @@ function main()
             ρ′[n] += ϵ
             bar′ = barrier!(g′, p, ρ′)
             println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n], " ", log(ρ[n]))
+        end
+        return
+    end
+
+    if false
+        # Check derivatives of (dual) objective!
+        p = CorrelatorProgram(cors, 0.5, 1.0, 1.0)
+        y = initial(p)
+        g = zero(y)
+        g′ = zero(y)
+        for n in 1:length(y)
+            ϵ = 1e-4
+            r = objective!(g, p, y)
+            y′ = copy(y)
+            y′[n] += ϵ
+            r′ = objective!(g′, p, y′)
+            println((r′-r)/ϵ, "     ", g[n])
         end
         return
     end
@@ -272,10 +309,21 @@ function main()
     for t in 0:0.1:1.0
         plo = CorrelatorProgram(cors, t, σ, 1.)
         phi = CorrelatorProgram(cors, t, σ, -1.)
-        lo = solve(plo; verbose=false)[1]
-        hi = solve(phi; verbose=false)[1]
-        println("$t  $lo $hi")
+        lo, ylo = solve(plo; verbose=true)
+        hi, yhi = solve(phi; verbose=true)
+        println("$t  $lo $(-hi)")
+        #println("    ", ylo)
     end
 end
+
+#=
+
+Debugging ideas:
+
+Why is the minimization so fast?
+
+The t=0 case should be doable analytically on symmetry principles.
+
+=#
 
 main()
