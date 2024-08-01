@@ -293,6 +293,34 @@ function main()
         return
     end
 
+    if false
+        # Check derivatives of dual barrier!
+        for sgn in [1.0,-1.0]
+            p = CorrelatorProgram(cors, 0.5, 1.0, 1.0)
+            y = initial(p)
+            if !SCAMP.IPM.feasible(p, y)
+                phase1 = SCAMP.IPM.Phase1(p)
+                y′ = initial(phase1)
+                function check(y)
+                    return SCAMP.IPM.feasible(p, y[2:end])
+                end
+                solve(SCAMP.IPM.Phase1(p), y′; verbose=true, gd=SCAMP.UnconstrainedOptimization.GradientDescent, early=check)
+                y = y′[2:end]
+            end
+            g = zero(y)
+            g′ = zero(y)
+            bar = SCAMP.IPM.barrier!(g, p, y)
+            for n in 1:length(y)
+                ϵ = y[n] * 1e-4
+                y′ = copy(y)
+                y′[n] += ϵ
+                bar′ = SCAMP.IPM.barrier!(g′, p, y′)
+                println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n], " ", log(y[n]))
+            end
+        end
+        return
+    end
+
     if args["primal"]
         # Solve primal
         σ = 1.0
@@ -325,7 +353,7 @@ function main()
                 # Obtain the minimizing ρ
             end
             hi, yhi = solve(phi; verbose=true)
-            println("$t  $lo $(-hi)")
+            println("$t  $(-lo) $hi")
             #println("    ", ylo)
         end
     end
@@ -335,12 +363,7 @@ end
 
 Debugging ideas:
 
-Solving the "lo" dual problem gives an impossible "lower" bound. This is the
-most serious bug. Imagine holding λ fixed and performing the minimization over
-ρ. It _should_ reproduce the the evaluation of the dual objective.
-
- * If it does not, then we have the wrong dual objective.
- * If it does, then minimax is somehow violated (!?)
+It's weird that the lower/upper dual bounds take radically different times to run.
 
 Why is phase1 unbounded below?
 
