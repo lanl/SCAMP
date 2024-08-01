@@ -26,6 +26,7 @@ struct CorrelatorProgram <: ConvexProgram
     τ::Vector{Float64}
     C::Vector{Float64}
     M::Matrix{Float64}
+    Minv::Matrix{Float64}
     t::Float64
     σ::Float64
     sgn::Float64
@@ -48,7 +49,7 @@ struct CorrelatorProgram <: ConvexProgram
         end
 
         τ = collect(1:Float64(β))
-        K = 3000
+        K = 1000
         M = zeros((β,β))
         # TODO use Σ
         for n in 1:β
@@ -56,13 +57,15 @@ struct CorrelatorProgram <: ConvexProgram
         end
         xs = resample(Cs; K=K) do Cs
             C′ = mean(Cs)
+            # TODO reconstruct M from this resampling (think about this)
             v = C′ - C
             return v' * M * v
         end
         sort!(xs)
         x = xs[round(Int,(1-p)*K)]
         M ./= x
-        new(Float64(β), τ, C, M, t, σ, sgn)
+        Minv = inv(M)
+        new(Float64(β), τ, C, M, Minv, t, σ, sgn)
     end
 end
 
@@ -138,17 +141,49 @@ end
 function objective!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     # Unpack
     μ, ℓ = y[1], y[2:end]
-    # TODO
+    g .= 0.0
+    r = 0.0
+
+    # Constant (in ℓ) piece.
+    g[1] = (p.C' * p.M * p.C - 1)
+    r += μ * g[1]
+
+    # Inversion piece, and gradients
+    ℓMinvℓ = (ℓ' * p.Minv * ℓ)
+    r += -1 * ℓMinvℓ / (4 * μ)
+    g[1] += ℓMinvℓ / (4 * μ^2)
+    gℓ = -2 * p.Minv * ℓ / (4*μ)
+    g[2:end] .= gℓ
+    return r
 end
 
 function constraints!(cb, p::CorrelatorProgram, y::Vector{Float64})
-    μ, ℓ = y[1], y[2:end]
-    # TODO
+    dλ = zero(y)
+    for ω in dω:dω:Ω
+        λ = λ!(dλ, p, y, ω)
+        cb(dω*λ, dλ)
+    end
 end
 
-function λ!(gℓ::Vector{Float64}, p::CorrelatorProgram, ℓ::Vector{Float64}, ω::Float64)::Float64
-    # TODO
-    return 0.0
+function λ!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64}, ω::Float64)::Float64
+    g .= 0.0
+    μ = y[1]
+
+    # (\mathcal K) term. No gradient
+    r = -2 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
+
+    # Constant (in ℓ) term, with gradient.
+    g[1] = -2 * (p.C' * p.M * p.C)
+    r += μ * g[1]
+
+    # K^T ℓ term, with gradient
+    for (i,τ) in enumerate(p.τ)
+        ℓ = y[1+i]
+        gℓ = cosh(ω * (p.β/2 - τ)) / sinh(p.β * ω / 2)
+        g[1+i] = gℓ
+        r += ℓ * gℓ
+    end
+    return r
 end
 
 function main()

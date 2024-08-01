@@ -67,7 +67,7 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
     end
 end
 
-function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
+function solve(prog::ConvexProgram, y; verbose::Bool=false, early=nothing)::Tuple{Float64, Vector{Float64}}
     if !feasible(prog, y)
         error("Initial point was not feasible")
     end
@@ -96,6 +96,11 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
         if verbose
             println(t, " ", v, "   ", obj)
         end
+        if !isnothing(early)
+            if early(y)
+                break
+            end
+        end
         t = μ*t
     end
 
@@ -115,7 +120,10 @@ function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{
         end
         phase1 = Phase1(prog)
         y′ = initial(phase1)
-        solve(Phase1(prog), y′; verbose=true)
+        function check(y)
+            return feasible(prog, y)
+        end
+        solve(Phase1(prog), y′; verbose=true, early=check)
         y = y′[2:end]
     end
 
