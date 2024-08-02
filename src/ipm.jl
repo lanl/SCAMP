@@ -67,6 +67,13 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
     end
 end
 
+function feasible_initial(prog::ConvexProgram; verbose::Bool)::Vector{Float64}
+    println(stderr, "Finding feasible initial point...")
+
+    y = initial(prog)
+    g = zero(y)
+end
+
 function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothing)::Tuple{Float64, Vector{Float64}}
     if !feasible(prog, y)
         error("Initial point was not feasible")
@@ -94,7 +101,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
         end
         obj = objective!(g, prog, y)
         if verbose
-            println(t, " ", v, "   ", obj)
+            println(stderr, t, " ", v, "   ", obj)
         end
         if !isnothing(early)
             if early(y)
@@ -110,20 +117,20 @@ end
 function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
     y = initial(prog)
     if verbose
-        println("Solving SDP: $(length(y)) degrees of freedom")
+        println(stderr, "Solving SDP: $(length(y)) degrees of freedom")
     end
 
     if !feasible(prog, y)
         # Perform phase-1 optimization.
         if verbose
-            println("Initial point infeasible; performing phase-1 optimization...")
+            println(stderr, "Initial point infeasible; performing phase-1 optimization...")
         end
         phase1 = Phase1(prog)
         y′ = initial(phase1)
         function check(y)
             return feasible(prog, y[2:end])
         end
-        solve(Phase1(prog), y′; verbose=verbose, gd=GradientDescent, early=check)
+        solve(Phase1(prog), y′; verbose=verbose, gd=BFGS, early=check)
         y = y′[2:end]
     end
     # Check feasibility
@@ -131,8 +138,11 @@ function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{
         error("Phase1 solver found infeasible point!")
     end
 
+    println(y)
+    error("TODO")
+
     if verbose
-        println("Performing phase-2 optimization...")
+        println(stderr, "Performing phase-2 optimization...")
     end
     return solve(prog, y; verbose=verbose)
 end

@@ -17,7 +17,7 @@ function (gd::GradientDescent)(f!, y::Vector{Float64})::Float64
     ∇::Vector{Float64} = zero(y)
     ∇′::Vector{Float64} = zero(y)
     y′::Vector{Float64} = zero(y)
-    for step in 1:100
+    for step in 1:500
         r₀ = f!(∇′, y)
         for k in 1:100
             r = f!(∇, y)
@@ -122,6 +122,10 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
     for step in 1:100
         # Get initial value and gradient.
         r₀ = f!(∇, y)
+        if isnan(r₀)
+            error("Reached NaN")
+        end
+        println("step=$step   $r₀")
         g = H * ∇
         g ./= norm(g)
 
@@ -155,7 +159,8 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
         y .+= v
         α *= 10
 
-        f!(∇′, y)
+        # Update the gradient
+        #println(f!(∇′, y), "   ", y)
 
         # Update inverse Hessian.
         d = ∇′ - ∇

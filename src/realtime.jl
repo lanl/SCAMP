@@ -8,8 +8,8 @@ import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.05
-const Ω = 3.0
+const dω = 0.01
+const Ω = 2.0
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
@@ -70,6 +70,10 @@ struct CorrelatorProgram <: ConvexProgram
         M ./= x
         Minv = inv(M)
         new(Float64(β), τ, C, M, Minv, t, σ, sgn)
+    end
+
+    function CorrelatorProgram(p::CorrelatorProgram; t::Float64, sgn::Float64)::CorrelatorProgram
+        new(p.β, p.τ, p.C, p.M, p.Minv, t, p.σ, sgn)
     end
 end
 
@@ -266,7 +270,7 @@ function main()
     if false
         # Check derivatives of barrier!
         p = primal(CorrelatorProgram(cors, 0.5, 1.0, 1.0))
-        ρ = solve(p; verbose=true)[2]
+        ρ = solve(p; verbose=false)[2]
         g = zero(ρ)
         g′ = zero(ρ)
         bar = barrier!(g, p, ρ)
@@ -325,31 +329,30 @@ function main()
         return
     end
 
+    σ = 5.0
     if args["primal"]
         # Solve primal
-        σ = 1.0
-        for t in 0.2:.2:1.
-            plo = CorrelatorProgram(cors, t, σ, 1.)
-            phi = CorrelatorProgram(cors, t, σ, -1.)
-            lo, ρlo = solve(primal(plo); verbose=true)
-            hi, ρhi = solve(primal(phi); verbose=false)
+        p = CorrelatorProgram(cors, 0.0, σ, 1.0)
+        ρ0 = solve(primal(p); verbose=true)[2]
+        for t in 2.5:2.5:100.
+            plo = CorrelatorProgram(p, t=t, sgn=1.0)
+            phi = CorrelatorProgram(p, t=t, sgn=-1.0)
+            ρ = copy(ρ0)
+            lo, ρlo = solve(primal(plo), ρ; verbose=true)
+            ρ = copy(ρ0)
+            hi, ρhi = solve(primal(phi), ρ; verbose=true)
             println("$t  $lo $(-hi)")
-            #println(ρlo)
-            #println(ρhi)
-            #println(euclidean_correlator(plo.β, plo.τ, ρlo))
-            #println(euclidean_correlator(phi.β, phi.τ, ρhi))
-            #println(plo.C)
-            #println(ρlo)
+            flush(stdout)
         end
     else
         # Solve dual
-        σ = 1.0
         for t in 0.2:0.2:1.0
             plo = CorrelatorProgram(cors, t, σ, 1.)
             phi = CorrelatorProgram(cors, t, σ, -1.)
-            lo, ylo = solve(plo; verbose=false)
-            hi, yhi = solve(phi; verbose=false)
+            lo, ylo = solve(plo; verbose=true)
+            hi, yhi = solve(phi; verbose=true)
             println("$t  $(-lo) $hi")
+            flush(stdout)
             #println("    ", ylo)
         end
     end
@@ -359,11 +362,7 @@ end
 
 Debugging ideas:
 
-It's weird that the lower/upper dual bounds take radically different times to run.
-
-Why is phase1 unbounded below?
-
-The t=0 case should be doable analytically on symmetry principles.
+Why is the dual phase1 unbounded below?
 
 =#
 
