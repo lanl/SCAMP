@@ -67,11 +67,31 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
     end
 end
 
-function feasible_initial(prog::ConvexProgram; verbose::Bool)::Vector{Float64}
-    println(stderr, "Finding feasible initial point...")
+function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Float64}
+    if verbose
+        println(stderr, "Finding feasible initial point...")
+    end
 
     y = initial(prog)
     g = zero(y)
+
+    minimize!(BFGS, y) do g, y
+        r::Float64 = 0.
+        g .= 0.0
+        constraints!(prog, y) do f,g′
+            if f ≤ 0
+                r -= f
+                g .-= g′
+            end
+        end
+        return r
+    end
+
+    if !feasible(prog, y)
+        error("No feasible point found.")
+    end
+
+    return y
 end
 
 function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothing)::Tuple{Float64, Vector{Float64}}
@@ -115,31 +135,10 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
 end
 
 function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
-    y = initial(prog)
     if verbose
-        println(stderr, "Solving SDP: $(length(y)) degrees of freedom")
+        println(stderr, "Solving $(typeof(prog))")
     end
-
-    if !feasible(prog, y)
-        # Perform phase-1 optimization.
-        if verbose
-            println(stderr, "Initial point infeasible; performing phase-1 optimization...")
-        end
-        phase1 = Phase1(prog)
-        y′ = initial(phase1)
-        function check(y)
-            return feasible(prog, y[2:end])
-        end
-        solve(Phase1(prog), y′; verbose=verbose, gd=BFGS, early=check)
-        y = y′[2:end]
-    end
-    # Check feasibility
-    if !feasible(prog, y)
-        error("Phase1 solver found infeasible point!")
-    end
-
-    println(y)
-    error("TODO")
+    y = feasible_initial(prog; verbose=verbose)
 
     if verbose
         println(stderr, "Performing phase-2 optimization...")

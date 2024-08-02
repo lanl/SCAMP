@@ -125,7 +125,7 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
         if isnan(r₀)
             error("Reached NaN")
         end
-        println("step=$step   $r₀")
+        #println("step=$step   $r₀")
         g = H * ∇
         g ./= norm(g)
 
@@ -165,7 +165,7 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
         # Update inverse Hessian.
         d = ∇′ - ∇
         den = v' * d
-        #den += 1e-8  # Crude damping
+        den += 1e-8  # Crude damping
         H = H + (v' * d + d' * H * d) * (v * v') / den^2 - (H * d * v' + v * d' * H) / den
     end
     return f!(∇, y)[1]
