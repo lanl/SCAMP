@@ -8,8 +8,8 @@ import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.01
-const Ω = 2.0
+const dω = 0.02
+const Ω = 0.5
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
@@ -99,16 +99,6 @@ function objective!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     return r
 end
 
-function euclidean_correlator(β, τs, ρ)::Vector{Float64}
-    cor = zero(τs)
-    for (i,τ) in enumerate(τs)
-        for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
-            cor[i] += (exp(-ω*τ) + exp(-ω * (β -τ))) / (1 - exp(-ω*β)) * dω * ρω
-        end
-    end
-    return cor
-end
-
 function constraints!(cb, p::PrimalCorrelatorProgram, ρ::Vector{Float64})
     β = length(p.cp.C)
     g = zero(ρ)
@@ -151,7 +141,7 @@ function objective!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     r = 0.0
 
     # Constant (in ℓ) piece.
-    g[1] = (p.C' * p.M * p.C - 1)
+    g[1] = -1.0
     r += μ * g[1]
 
     # Inversion piece, and gradients
@@ -160,6 +150,10 @@ function objective!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     g[1] += ℓMinvℓ / (4 * μ^2)
     gℓ = -2 * p.Minv * ℓ / (4*μ)
     g[2:end] .= gℓ
+
+    # Inner product, and gradients
+    g[2:end] .+= p.C
+    r += p.C' * ℓ
 
     # We're maximizing, not minimizing.
     r *= -1
@@ -187,15 +181,17 @@ function λ!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64}, ω::F
     # (\mathcal K) term. No gradient
     r = p.sgn * -2 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
 
-    # Constant (in ℓ) term, with gradient.
-    g[1] = -2 * (p.C' * p.M * p.C)
-    r += μ * g[1]
-
-    # K^T ℓ term, with gradient
+    # -K^T ℓ term, with gradient
     for (i,τ) in enumerate(p.τ)
+        if false # TODO
+            if i < length(p.τ)
+                # There should be a feasible point...
+                continue
+            end
+        end
         ℓ = y[1+i]
         #gℓ = cosh(ω * (p.β/2 - τ)) / sinh(p.β * ω / 2)
-        gℓ = (exp(-ω*τ) + exp(-ω * (p.β -τ))) / (1 - exp(-ω*p.β))
+        gℓ = -(exp(-ω*τ) + exp(-ω * (p.β -τ))) / (1 - exp(-ω*p.β))
         g[1+i] = gℓ
         r += ℓ * gℓ
     end
@@ -291,7 +287,7 @@ function main()
         g = zero(y)
         g′ = zero(y)
         for n in 1:length(y)
-            ϵ = 1e-6
+            ϵ = 1e-5
             r = objective!(g, p, y)
             y′ = copy(y)
             y′[n] += ϵ
@@ -323,7 +319,46 @@ function main()
                 y′ = copy(y)
                 y′[n] += ϵ
                 bar′ = SCAMP.IPM.barrier!(g′, p, y′)
-                println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n], " ", log(y[n]))
+                println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n])
+            end
+        end
+        return
+    end
+
+    if false
+        # Brute force, to demonstrate that such a feasible point exists
+        t = 50.0
+        σ = 5.0
+        p = CorrelatorProgram(cors, t, σ, 1.)
+        y = initial(p)
+        y[2:end-1] .= 0.0
+
+        for yend in 1.5:.01:2.9
+            feas = true
+            last = 0.0
+            for y1 in 0:.00001:.02
+                #y[1] = 1.1
+                y[1] = y1
+                #y[end] = 100.0
+                y[end] = yend
+                #if !SCAMP.IPM.feasible(p,y)
+                #    println("NOT FEASIBLE")
+                #end
+                g = zero(y)
+                obj = objective!(g, p, y)
+                #println("Objective: $obj")
+                #println()
+                cs = Float64[]
+                constraints!(p,y) do f, g
+                    push!(cs, f)
+                end
+                #println("      (worst constraint:) ", minimum(cs))
+                #println(y1, ",", yend, "     ", minimum(cs), "   ", obj)
+                if !SCAMP.IPM.feasible(p,y) && feas
+                    println(yend, "   ", obj, "     ", yend, "  ", y1)
+                    feas = false
+                end
+                last = obj
             end
         end
         return
@@ -346,7 +381,7 @@ function main()
         end
     else
         # Solve dual
-        for t in 0.2:0.2:1.0
+        for t in 5.0:5.0:30.0
             plo = CorrelatorProgram(cors, t, σ, 1.)
             phi = CorrelatorProgram(cors, t, σ, -1.)
             lo, ylo = solve(plo; verbose=false)
@@ -364,6 +399,13 @@ Debugging ideas:
 
 Why is the dual phase1 unbounded below?
 
+It seems we are running into numerical precision issues in the dual problem.
+Use quadmath? Arbitrary precision? Precondition?
+
+Phase1 solver is still not reliable. This appears when solving the primal, and
+when excluding large numbers of degrees of freedom from the dual.
+
 =#
 
 main()
+

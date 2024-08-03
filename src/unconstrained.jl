@@ -110,8 +110,8 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
     y′::Vector{Float64} = zero(y)
 
     α = 1.
-    αmin = 1e-12
-    δmin = 1e-12
+    αmin = 1e-10
+    δmin = 1e-10
 
     # Initial guess of inverse Hessian (just guess the identity).
     H = zeros(Float64, (N,N))
@@ -160,13 +160,25 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
         α *= 10
 
         # Update the gradient
+        f!(∇′, y)
         #println(f!(∇′, y), "   ", y)
+        #println("     ", ∇′)
+        #println(H[1,1])
+        #println()
 
         # Update inverse Hessian.
         d = ∇′ - ∇
         den = v' * d
-        den += 1e-8  # Crude damping
+        den += 1e-3  # Crude damping
         H = H + (v' * d + d' * H * d) * (v * v') / den^2 - (H * d * v' + v * d' * H) / den
+        if rand() < 1e-9 && false
+            F = eigen(Hermitian(H))
+            println("   DUMPING INVERSE-HESSIAN EIGENDECOMPOSITION")
+            println("     VALUES: ", F.values)
+            println("     LOWEST VECTOR: ", F.vectors[:,1])
+            println("     HIGHEST VECTOR: ", F.vectors[:,end])
+            println("  ", y)
+        end
     end
     return f!(∇, y)[1]
 end
