@@ -119,7 +119,7 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
         H[n,n] = 1.0
     end
 
-    for step in 1:100
+    for step in 1:10000
         # Get initial value and gradient.
         r₀ = f!(∇, y)
         if isnan(r₀)
@@ -169,7 +169,7 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
         # Update inverse Hessian.
         d = ∇′ - ∇
         den = v' * d
-        den += 1e-3  # Crude damping
+        den += 1e-8  # Crude damping
         H = H + (v' * d + d' * H * d) * (v * v') / den^2 - (H * d * v' + v * d' * H) / den
         if rand() < 1e-9 && false
             F = eigen(Hermitian(H))

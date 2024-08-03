@@ -8,8 +8,8 @@ import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.02
-const Ω = 0.5
+const dω = 0.01
+const Ω = 2.0
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
@@ -381,9 +381,10 @@ function main()
         end
     else
         # Solve dual
+        p = CorrelatorProgram(cors, 0.0, σ, 1.0)
         for t in 5.0:5.0:30.0
-            plo = CorrelatorProgram(cors, t, σ, 1.)
-            phi = CorrelatorProgram(cors, t, σ, -1.)
+            plo = CorrelatorProgram(p, t=t, sgn=1.0)
+            phi = CorrelatorProgram(p, t=t, sgn=-1.0)
             lo, ylo = solve(plo; verbose=false)
             hi, yhi = solve(phi; verbose=false)
             println("$t  $(-lo) $hi")
