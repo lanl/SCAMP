@@ -3,9 +3,10 @@
 using LinearAlgebra
 
 function main()
-    ω², λ = 0.01, 0.001
+    ω², λ = 0.001, 0.00001
+    #ω², λ = parse(Float64, ARGS[1]), parse(Float64, ARGS[2])
     ω = √ω²
-    N = 100
+    N = 200
     a = zeros(ComplexF64, (N,N))
     for i in 1:(N-1)
         a[i,i+1] = sqrt(i)
@@ -34,22 +35,23 @@ function main()
     println("# mass gap: ", F.values[2] - F.values[1])
 
     # Compute real-time correlator.
-    dt = 0.1
-    ts = -20:dt:120
-    Ts = 0:dt:100
+    dt = 2.0
+    ts = -200:dt:1200
+    Ts = 0:dt:1000
 
     cor = zero(ts)
     for (k,t) in enumerate(ts)
         cor[k] = 2 * imag(C(t))
     end
 
-    σ = 5.0
+    σ = 20.0
     for T in Ts
-        C = 0.
+        exact = 2 * imag(C(T))
+        smeared = 0.
         for (t,c) in zip(ts, cor)
-            C += exp(-(T-t)^2 / (2. * σ^2)) * c / (sqrt(2*π) * σ) * dt
+            smeared += exp(-(T-t)^2 / (2. * σ^2)) * c / (sqrt(2*π) * σ) * dt
         end
-        println("$T $C")
+        println("$T $smeared $exact")
     end
 
 
