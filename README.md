@@ -1,10 +1,5 @@
 # SCAMP
 
-## Structure
-
-In `data/` are stored correlators for a few different theories, used as
-test-cases for the positivity-constrained analytic continuation.
-
 ## LANL open-source release
 
 This project is part of "Convex methods for physics", known internally as

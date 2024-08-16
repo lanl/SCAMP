@@ -1,4 +1,4 @@
-# Extract a susceptibility
+# Extract a smeared spectral function.
 
 using ArgParse
 using LinearAlgebra
@@ -21,15 +21,17 @@ function resample(f, x; K=1000)::Vector{Float64}
     return fs
 end
 
-struct SusceptibilityProgram <: ConvexProgram
+struct SpectralProgram <: ConvexProgram
     β::Float64
     τ::Vector{Float64}
     C::Vector{Float64}
     M::Matrix{Float64}
     Minv::Matrix{Float64}
+    ω::Float64
+    σ::Float64
     sgn::Float64
 
-    function SusceptibilityProgram(Cs, sgn::Float64; p::Float64=0.01)::SusceptibilityProgram
+    function SpectralProgram(Cs, ω::Float64, σ::Float64, sgn::Float64; p::Float64=0.01)::SpectralProgram
         N = length(Cs)
         C = mean(Cs)
         β = length(C)
@@ -60,14 +62,19 @@ struct SusceptibilityProgram <: ConvexProgram
         x = xs[round(Int,(1-p)*K)]
         M ./= x
         Minv = inv(M)
-        new(Float64(β), τ, C, M, Minv, sgn)
+        new(Float64(β), τ, C, M, Minv, ω, σ, sgn)
+    end
+
+    function SpectralProgram(p::SpectralProgram; ω::Float64, sgn::Float64)::SpectralProgram
+        new(p.β, p.τ, p.C, p.M, p.Minv, ω, p.σ, sgn)
     end
 end
 
-function initial(p::SusceptibilityProgram)::Vector{Float64}
+function initial(p::SpectralProgram)::Vector{Float64}
+    return rand(length(p.τ)+1)
 end
 
-function objective!(g, p::SusceptibilityProgram, y::Vector{Float64})::Float64
+function objective!(g, p::SpectralProgram, y::Vector{Float64})::Float64
     # Unpack
     μ, ℓ = y[1], @view(y[2:end])
     g .= 0.0
@@ -94,7 +101,7 @@ function objective!(g, p::SusceptibilityProgram, y::Vector{Float64})::Float64
     return r
 end
 
-function constraints!(cb, p::SusceptibilityProgram, y::Vector{Float64})
+function constraints!(cb, p::SpectralProgram, y::Vector{Float64})
     dλ = zero(y)
     for ω in dω:dω:Ω
         λ = λ!(dλ, p, y, ω)
@@ -107,12 +114,13 @@ function constraints!(cb, p::SusceptibilityProgram, y::Vector{Float64})
     cb(μ, dμ)
 end
 
-function λ!(g::Vector{Float64}, p::SusceptibilityProgram, y::Vector{Float64}, ω::Float64)::Float64
+function λ!(g::Vector{Float64}, p::SpectralProgram, y::Vector{Float64}, ω::Float64)::Float64
     g .= 0.0
     μ = y[1]
 
-    # (\mathcal K) term. No gradient. TODO
-    r = p.sgn * -1 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
+    # (\mathcal K) term. No gradient.
+    #r = p.sgn * -1 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
+    r = p.sgn * exp(-(ω - p.ω)^2 / (2 * p.σ^2))
 
     # -K^T ℓ term, with gradient
     for (i,τ) in enumerate(p.τ)
@@ -129,6 +137,13 @@ function main()
     args = let
         s = ArgParseSettings()
         @add_arg_table s begin
+            "--omega"
+                required = true
+                arg_type = Float64
+            "-s","--sigma"
+                required = true
+                default = 1.0
+                arg_type = Float64
             "--skip"
                 required = false
                 default = 1
@@ -154,12 +169,16 @@ function main()
     # Skip
     cors = cors[1:args["skip"]:end]
 
-    plo = SusceptibilityProgram(cors, 1.0)
-    phi = SusceptibilityProgram(cors, 1.0)
+    σ = args["sigma"]
+    ω = args["omega"]
+    p = SpectralProgram(cors, 0.0, σ, 1.0)
+    plo = SpectralProgram(p, ω=ω, sgn=1.0)
+    phi = SpectralProgram(p, ω=ω, sgn=-1.0)
     lo, ylo = solve(plo; verbose=false)
     hi, yhi = solve(phi; verbose=false)
     println("$(-lo) $hi")
-end
+    return
+ end
 
 main()
 

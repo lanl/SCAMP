@@ -8,8 +8,8 @@ import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.01
-const Ω = 2.0
+const dω = 0.001
+const Ω = 1.0
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
@@ -46,7 +46,7 @@ struct CorrelatorProgram <: ConvexProgram
         # Regulate.
         maxeig = maximum(eigvals(Σ))
         for i in 1:β
-            Σ[i,i] += 1e-5 * maxeig
+            Σ[i,i] += 1e-6 * maxeig
         end
 
         τ = collect(1:Float64(β))
@@ -92,7 +92,7 @@ end
 function objective!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
     r = 0.
     for (i,ω) in enumerate(ωs)
-        coef = -2 * sin(ω*p.cp.t) * exp(-ω^2 * p.cp.σ^2 / 2) * dω
+        coef = -1 * sin(ω*p.cp.t) * exp(-ω^2 * p.cp.σ^2 / 2) * dω
         g[i] = coef * p.cp.sgn
         r += ρ[i] * coef * p.cp.sgn
     end
@@ -179,7 +179,7 @@ function λ!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64}, ω::F
     μ = y[1]
 
     # (\mathcal K) term. No gradient
-    r = p.sgn * -2 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
+    r = p.sgn * -1 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
 
     # -K^T ℓ term, with gradient
     for (i,τ) in enumerate(p.τ)
@@ -204,6 +204,13 @@ function main()
         @add_arg_table s begin
             "-P","--primal"
                 action = :store_true
+            "-T","--time"
+                required = true
+                arg_type = Float64
+            "-s","--sigma"
+                required = false
+                default = 1.0
+                arg_type = Float64
             "--skip"
                 required = false
                 default = 1
@@ -364,7 +371,17 @@ function main()
         return
     end
 
-    σ = 5.0
+    σ = args["sigma"]
+    T = args["time"]
+    p = CorrelatorProgram(cors, 0.0, σ, 1.0)
+    plo = CorrelatorProgram(p, t=T, sgn=1.0)
+    phi = CorrelatorProgram(p, t=T, sgn=-1.0)
+    lo, ylo = solve(plo; verbose=false)
+    hi, yhi = solve(phi; verbose=false)
+    println("$(-lo) $hi")
+    return
+
+    σ = args["sigma"]
     if args["primal"]
         # Solve primal
         p = CorrelatorProgram(cors, 0.0, σ, 1.0)
@@ -382,7 +399,7 @@ function main()
     else
         # Solve dual
         p = CorrelatorProgram(cors, 0.0, σ, 1.0)
-        for t in 5.0:5.0:30.0
+        for t in 10.0:10.0:2000.0
             plo = CorrelatorProgram(p, t=t, sgn=1.0)
             phi = CorrelatorProgram(p, t=t, sgn=-1.0)
             lo, ylo = solve(plo; verbose=false)

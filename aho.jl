@@ -1,9 +1,29 @@
 #!/usr/bin/env julia
 
+using ArgParse
 using LinearAlgebra
 
 function main()
-    ω², λ = 0.001, 0.00001
+    args = let
+        s = ArgParseSettings()
+        @add_arg_table s begin
+            "--correlator"
+                arg_type = String
+                required = false
+            "--spectral"
+                arg_type = String
+                required = false
+            "--sigma"
+                arg_type = Float64
+                required = true
+        end
+        parse_args(s)
+    end
+    σ = args["sigma"]
+
+    #ω², λ = 0.0001, 0.000001
+    #ω², λ = 1e-4, 1e-6
+    ω², λ = 1e-4, 1e-5
     #ω², λ = parse(Float64, ARGS[1]), parse(Float64, ARGS[2])
     ω = √ω²
     N = 200
@@ -15,7 +35,7 @@ function main()
     p = 1im * sqrt(ω/2) * (a' - a)
     H = 0.5*p^2 + 0.5 * ω² * x^2 + 0.25 * λ * x^4
     F = eigen(Hermitian(H))
-    β = 20
+    β = 30
 
     Ω = F.vectors[:,1]
     ρ = (F.vectors) * diagm(exp.(-β * F.values)) * F.vectors'
@@ -34,26 +54,53 @@ function main()
     # Print mass gap
     println("# mass gap: ", F.values[2] - F.values[1])
 
-    # Compute real-time correlator.
-    dt = 2.0
-    ts = -200:dt:1200
-    Ts = 0:dt:1000
+    if !isnothing(args["correlator"])
+        open(args["correlator"], "w") do f
+            # Compute real-time correlator.
+            dt = 5.0
+            ts = -100:1.0:700
+            Ts = 0:dt:600
 
-    cor = zero(ts)
-    for (k,t) in enumerate(ts)
-        cor[k] = 2 * imag(C(t))
-    end
+            cor = zero(ts)
+            for (k,t) in enumerate(ts)
+                cor[k] = imag(C(t))
+            end
 
-    σ = 20.0
-    for T in Ts
-        exact = 2 * imag(C(T))
-        smeared = 0.
-        for (t,c) in zip(ts, cor)
-            smeared += exp(-(T-t)^2 / (2. * σ^2)) * c / (sqrt(2*π) * σ) * dt
+            for T in Ts
+                exact = imag(C(T))
+                smeared = 0.
+                den = 0.
+                for (t,c) in zip(ts, cor)
+                    smeared += exp(-(T-t)^2 / (2. * σ^2)) * c
+                    den += exp(-(T-t)^2 / (2. * σ^2))
+                end
+                smeared /= den
+                println(f, "$T $smeared $exact")
+            end
         end
-        println("$T $smeared $exact")
     end
 
+    if !isnothing(args["spectral"])
+        open(args["spectral"], "w") do f
+            # Compute smeared spectral function
+            Z = tr(ρ)
+
+            ωs = 0:.001:1
+            for ω in ωs
+                spec = 0.0
+                for n in 1:N
+                    for m in 1:N
+                        En = F.values[n]
+                        Em = F.values[m]
+                        ω′ = Em-En
+                        spec += 2/Z * sinh(β*ω/2) * exp(-β * (En+Em)/2) * exp(-0)
+                    end
+                end
+                # TODO
+                println(f, "$ω $spec")
+            end
+        end
+    end
 
     if false
         # Comparing two exponential integrals.
