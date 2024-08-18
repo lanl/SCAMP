@@ -3,13 +3,15 @@
 using ArgParse
 using LinearAlgebra
 using Random: rand, randn, rand!, randn!
+using SpecialFunctions: erf
 using Statistics: mean, cov
 
 using SCAMP
 import SCAMP: initial, constraints!, objective!
 
+#const dω = 0.0001
 const dω = 0.001
-const Ω = 1.0
+const Ω = 0.5
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
@@ -114,13 +116,17 @@ function constraints!(cb, p::SpectralProgram, y::Vector{Float64})
     cb(μ, dμ)
 end
 
+function Φ(x::Float64)
+    return (1 + erf(x/sqrt(2)))/2
+end
+
 function λ!(g::Vector{Float64}, p::SpectralProgram, y::Vector{Float64}, ω::Float64)::Float64
     g .= 0.0
     μ = y[1]
 
     # (\mathcal K) term. No gradient.
     #r = p.sgn * -1 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
-    r = p.sgn * exp(-(ω - p.ω)^2 / (2 * p.σ^2))
+    r = p.sgn * exp(-(ω - p.ω)^2 / (2 * p.σ^2)) / (Φ(p.ω/p.σ) * sqrt(2*π)*p.σ)
 
     # -K^T ℓ term, with gradient
     for (i,τ) in enumerate(p.τ)
@@ -177,6 +183,13 @@ function main()
     lo, ylo = solve(plo; verbose=false)
     hi, yhi = solve(phi; verbose=false)
     println("$(-lo) $hi")
+    if false
+        for ω in ωs
+            dλ = zero(ylo)
+            λ = λ!(dλ, plo, ylo, ω)
+            println("$ω, $λ")
+        end
+    end
     return
 end
 

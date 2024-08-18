@@ -2,6 +2,11 @@
 
 using ArgParse
 using LinearAlgebra
+using SpecialFunctions: erf
+
+function Φ(x::Float64)
+    return (1 + erf(x/sqrt(2)))/2
+end
 
 function main()
     args = let
@@ -83,20 +88,28 @@ function main()
     if !isnothing(args["spectral"])
         open(args["spectral"], "w") do f
             # Compute smeared spectral function
-            Z = tr(ρ)
+            Z = real(tr(ρ))
 
-            ωs = 0:.001:1
+            dω = 1e-2
+            ωs = 0:dω:0.4
             for ω in ωs
                 spec = 0.0
                 for n in 1:N
-                    for m in 1:N
+                    for m in n:N
                         En = F.values[n]
                         Em = F.values[m]
+                        vn = @view F.vectors[:,n]
+                        vm = @view F.vectors[:,m]
                         ω′ = Em-En
-                        spec += 2/Z * sinh(β*ω/2) * exp(-β * (En+Em)/2) * exp(-0)
+                        #mul!(u, x, vm)
+                        #mat = abs(vn' * u)^2
+                        mat = abs(vn' * x * vm)^2
+                        if abs(ω-ω′) < 8*σ
+                            spec += 2/Z * sinh(β*ω′/2) * exp(-β * (En+Em)/2) * exp(-(ω - ω′)^2 / (2 * σ^2)) / (Φ(ω/σ) * sqrt(2*π)*σ) * mat
+                        end
                     end
                 end
-                # TODO
+                println("$ω $spec")
                 println(f, "$ω $spec")
             end
         end

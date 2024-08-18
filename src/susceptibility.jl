@@ -9,7 +9,7 @@ using SCAMP
 import SCAMP: initial, constraints!, objective!
 
 const dω = 0.001
-const Ω = 1.0
+const Ω = 2.0
 const ωs = dω:dω:Ω
 
 function resample(f, x; K=1000)::Vector{Float64}
@@ -44,11 +44,10 @@ struct SusceptibilityProgram <: ConvexProgram
         # Regulate.
         maxeig = maximum(eigvals(Σ))
         for i in 1:β
-            Σ[i,i] += 1e-6 * maxeig
+            Σ[i,i] += 1e-3 * maxeig
         end
 
         τ = collect(1:Float64(β))
-        K = 1000
         M = inv(Σ)
         xs = resample(Cs; K=K) do Cs
             C′ = mean(Cs)
@@ -65,6 +64,7 @@ struct SusceptibilityProgram <: ConvexProgram
 end
 
 function initial(p::SusceptibilityProgram)::Vector{Float64}
+    return rand(1+length(p.τ))
 end
 
 function objective!(g, p::SusceptibilityProgram, y::Vector{Float64})::Float64
@@ -111,8 +111,9 @@ function λ!(g::Vector{Float64}, p::SusceptibilityProgram, y::Vector{Float64}, �
     g .= 0.0
     μ = y[1]
 
-    # (\mathcal K) term. No gradient. TODO
-    r = p.sgn * -1 * sin(ω * p.t) * exp(-(p.σ^2 * ω^2)/2)
+    # (\mathcal K) term. No gradient.
+    #r = p.sgn / ω * exp(-1/ω)
+    r = p.sgn * exp(-ω^2)
 
     # -K^T ℓ term, with gradient
     for (i,τ) in enumerate(p.τ)
@@ -129,10 +130,6 @@ function main()
     args = let
         s = ArgParseSettings()
         @add_arg_table s begin
-            "--skip"
-                required = false
-                default = 1
-                arg_type = Int
             "correlator"
                 required = true
                 arg_type = String
@@ -151,14 +148,13 @@ function main()
             cors
         end
     end
-    # Skip
-    cors = cors[1:args["skip"]:end]
 
     plo = SusceptibilityProgram(cors, 1.0)
-    phi = SusceptibilityProgram(cors, 1.0)
-    lo, ylo = solve(plo; verbose=false)
-    hi, yhi = solve(phi; verbose=false)
+    phi = SusceptibilityProgram(cors, -1.0)
+    lo, ylo = solve(plo; verbose=true)
+    hi, yhi = solve(phi; verbose=true)
     println("$(-lo) $hi")
+    println(ylo)
 end
 
 main()
