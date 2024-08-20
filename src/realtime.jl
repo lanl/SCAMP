@@ -183,12 +183,6 @@ function λ!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64}, ω::F
 
     # -K^T ℓ term, with gradient
     for (i,τ) in enumerate(p.τ)
-        if false # TODO
-            if i < length(p.τ)
-                # There should be a feasible point...
-                continue
-            end
-        end
         ℓ = y[1+i]
         #gℓ = cosh(ω * (p.β/2 - τ)) / sinh(p.β * ω / 2)
         gℓ = -(exp(-ω*τ) + exp(-ω * (p.β -τ))) / (1 - exp(-ω*p.β))
@@ -215,6 +209,8 @@ function main()
                 required = false
                 default = 1
                 arg_type = Int
+            "-V","--verbose"
+                action = :store_true
             "correlator"
                 required = true
                 arg_type = String
@@ -235,195 +231,17 @@ function main()
     end
     # Skip
     cors = cors[1:args["skip"]:end]
+    verbose = args["verbose"]
    
-    if false
-        # Check derivatives of barrier! for primal Phase1
-        p = SCAMP.IPM.Phase1(primal(CorrelatorProgram(cors, 0.5, 1.0, 1.0)))
-        ρ = initial(p)
-        g = zero(ρ)
-        g′ = zero(ρ)
-        bar = SCAMP.IPM.barrier!(g, p, ρ)
-        for n in 1:length(ρ)
-            ϵ = 1e-5
-            ρ′ = copy(ρ)
-            ρ′[n] += ϵ
-            bar′ = SCAMP.IPM.barrier!(g′, p, ρ′)
-            println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n], " ", (bar′-bar)/ϵ)
-        end
-        return
-    end
-
-    if false
-        # Check derivatives of barrier! for dual Phase1
-        p = SCAMP.IPM.Phase1(CorrelatorProgram(cors, 0.5, 1.0, 1.0))
-        ρ = initial(p)
-        g = zero(ρ)
-        g′ = zero(ρ)
-        bar = SCAMP.IPM.barrier!(g, p, ρ)
-        for n in 1:length(ρ)
-            ϵ = 1e-6
-            ρ′ = copy(ρ)
-            ρ′[n] += ϵ
-            bar′ = SCAMP.IPM.barrier!(g′, p, ρ′)
-            println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n], " ", (bar′-bar)/ϵ)
-        end
-        return
-    end
-
-    if false
-        # Check derivatives of barrier!
-        p = primal(CorrelatorProgram(cors, 0.5, 1.0, 1.0))
-        ρ = solve(p; verbose=false)[2]
-        g = zero(ρ)
-        g′ = zero(ρ)
-        bar = barrier!(g, p, ρ)
-        for n in 1:length(ρ)
-            ϵ = ρ[n] * 1e-4
-            ρ′ = copy(ρ)
-            ρ′[n] += ϵ
-            bar′ = barrier!(g′, p, ρ′)
-            println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n], " ", log(ρ[n]))
-        end
-        return
-    end
-
-    if false
-        # Check derivatives of (dual) objective!
-        p = CorrelatorProgram(cors, 0.5, 1.0, 1.0)
-        y = initial(p)
-        g = zero(y)
-        g′ = zero(y)
-        for n in 1:length(y)
-            ϵ = 1e-5
-            r = objective!(g, p, y)
-            y′ = copy(y)
-            y′[n] += ϵ
-            r′ = objective!(g′, p, y′)
-            println((r′-r)/ϵ - g[n], "            ", (r′-r)/ϵ, "     ", g[n])
-        end
-        return
-    end
-
-    if false
-        # Check derivatives of dual barrier!
-        for sgn in [1.0,-1.0]
-            p = CorrelatorProgram(cors, 0.5, 1.0, 1.0)
-            y = initial(p)
-            if !SCAMP.IPM.feasible(p, y)
-                phase1 = SCAMP.IPM.Phase1(p)
-                y′ = initial(phase1)
-                function check(y)
-                    return SCAMP.IPM.feasible(p, y[2:end])
-                end
-                solve(SCAMP.IPM.Phase1(p), y′; verbose=true, gd=SCAMP.UnconstrainedOptimization.GradientDescent, early=check)
-                y = y′[2:end]
-            end
-            g = zero(y)
-            g′ = zero(y)
-            bar = SCAMP.IPM.barrier!(g, p, y)
-            for n in 1:length(y)
-                ϵ = y[n] * 1e-4
-                y′ = copy(y)
-                y′[n] += ϵ
-                bar′ = SCAMP.IPM.barrier!(g′, p, y′)
-                println((bar′ - bar)/ϵ - g[n], "   ::   ", bar, " ", bar′, " ", g[n])
-            end
-        end
-        return
-    end
-
-    if false
-        # Brute force, to demonstrate that such a feasible point exists
-        t = 50.0
-        σ = 5.0
-        p = CorrelatorProgram(cors, t, σ, 1.)
-        y = initial(p)
-        y[2:end-1] .= 0.0
-
-        for yend in 1.5:.01:2.9
-            feas = true
-            last = 0.0
-            for y1 in 0:.00001:.02
-                #y[1] = 1.1
-                y[1] = y1
-                #y[end] = 100.0
-                y[end] = yend
-                #if !SCAMP.IPM.feasible(p,y)
-                #    println("NOT FEASIBLE")
-                #end
-                g = zero(y)
-                obj = objective!(g, p, y)
-                #println("Objective: $obj")
-                #println()
-                cs = Float64[]
-                constraints!(p,y) do f, g
-                    push!(cs, f)
-                end
-                #println("      (worst constraint:) ", minimum(cs))
-                #println(y1, ",", yend, "     ", minimum(cs), "   ", obj)
-                if !SCAMP.IPM.feasible(p,y) && feas
-                    println(yend, "   ", obj, "     ", yend, "  ", y1)
-                    feas = false
-                end
-                last = obj
-            end
-        end
-        return
-    end
-
     σ = args["sigma"]
     T = args["time"]
     p = CorrelatorProgram(cors, 0.0, σ, 1.0)
     plo = CorrelatorProgram(p, t=T, sgn=1.0)
     phi = CorrelatorProgram(p, t=T, sgn=-1.0)
-    lo, ylo = solve(plo; verbose=false)
-    hi, yhi = solve(phi; verbose=false)
+    lo, ylo = solve(plo; verbose=verbose)
+    hi, yhi = solve(phi; verbose=verbose)
     println("$(-lo) $hi")
-    return
-
-    σ = args["sigma"]
-    if args["primal"]
-        # Solve primal
-        p = CorrelatorProgram(cors, 0.0, σ, 1.0)
-        ρ0 = solve(primal(p); verbose=true)[2]
-        for t in 2.5:2.5:100.
-            plo = CorrelatorProgram(p, t=t, sgn=1.0)
-            phi = CorrelatorProgram(p, t=t, sgn=-1.0)
-            ρ = copy(ρ0)
-            lo, ρlo = solve(primal(plo), ρ; verbose=true)
-            ρ = copy(ρ0)
-            hi, ρhi = solve(primal(phi), ρ; verbose=true)
-            println("$t  $lo $(-hi)")
-            flush(stdout)
-        end
-    else
-        # Solve dual
-        p = CorrelatorProgram(cors, 0.0, σ, 1.0)
-        for t in 10.0:10.0:2000.0
-            plo = CorrelatorProgram(p, t=t, sgn=1.0)
-            phi = CorrelatorProgram(p, t=t, sgn=-1.0)
-            lo, ylo = solve(plo; verbose=false)
-            hi, yhi = solve(phi; verbose=false)
-            println("$t  $(-lo) $hi")
-            flush(stdout)
-            #println("    ", ylo)
-        end
-    end
 end
-
-#=
-
-Debugging ideas:
-
-Why is the dual phase1 unbounded below?
-
-It seems we are running into numerical precision issues in the dual problem.
-Use quadmath? Arbitrary precision? Precondition?
-
-Phase1 solver is still not reliable. This appears when solving the primal, and
-when excluding large numbers of degrees of freedom from the dual.
-
-=#
 
 main()
 

@@ -21,6 +21,10 @@ function main()
             "--sigma"
                 arg_type = Float64
                 required = true
+            "--beta"
+                arg_type = Int
+                required = false
+                default = 30
         end
         parse_args(s)
     end
@@ -40,7 +44,7 @@ function main()
     p = 1im * sqrt(ω/2) * (a' - a)
     H = 0.5*p^2 + 0.5 * ω² * x^2 + 0.25 * λ * x^4
     F = eigen(Hermitian(H))
-    β = 30
+    β = args["beta"]
 
     Ω = F.vectors[:,1]
     ρ = (F.vectors) * diagm(exp.(-β * F.values)) * F.vectors'
