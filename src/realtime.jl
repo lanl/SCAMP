@@ -77,59 +77,6 @@ struct CorrelatorProgram <: ConvexProgram
     end
 end
 
-struct PrimalCorrelatorProgram <: ConvexProgram
-    cp::CorrelatorProgram
-end
-
-function primal(p::CorrelatorProgram)::PrimalCorrelatorProgram
-    return PrimalCorrelatorProgram(p)
-end
-
-function initial(p::PrimalCorrelatorProgram)::Vector{Float64}
-    return rand(length(ωs))
-end
-
-function objective!(g, p::PrimalCorrelatorProgram, ρ::Vector{Float64})::Float64
-    r = 0.
-    for (i,ω) in enumerate(ωs)
-        coef = -1 * sin(ω*p.cp.t) * exp(-ω^2 * p.cp.σ^2 / 2) * dω
-        g[i] = coef * p.cp.sgn
-        r += ρ[i] * coef * p.cp.sgn
-    end
-    return r
-end
-
-function constraints!(cb, p::PrimalCorrelatorProgram, ρ::Vector{Float64})
-    β = length(p.cp.C)
-    g = zero(ρ)
-    # Positivity
-    for (k,ρω) in enumerate(ρ)
-        g[k] = dω
-        cb(ρω*dω, g)
-        g[k] = 0.
-    end
-
-    # Correlator error
-    cor = zeros(β)
-    dcor = zeros((β,length(ωs)))
-    for (i,τ) in enumerate(p.cp.τ)
-        for (k, (ω, ρω)) in enumerate(zip(ωs,ρ))
-            #dcor[i,k] = cosh(ω * (p.cp.β/2 - τ)) / sinh(p.cp.β*ω/2)
-            dcor[i,k] = (exp(-ω*τ) + exp(-ω * (p.cp.β -τ))) / (1 - exp(-ω*p.cp.β)) * dω
-            cor[i] += dcor[i,k] * ρω
-        end
-    end
-
-    v = cor - p.cp.C
-    err = v' * p.cp.M * v
-    for (k, ω) in enumerate(ωs)
-        for i in 1:β, j in 1:β
-            g[k] -= 2 * v'[i] * p.cp.M[i,j] * dcor[j,k]
-        end
-    end
-    cb(1-err, g)
-end
-
 function initial(p::CorrelatorProgram)::Vector{Float64}
     return rand(length(p.τ)+1)
 end
@@ -196,8 +143,6 @@ function main()
     args = let
         s = ArgParseSettings()
         @add_arg_table s begin
-            "-P","--primal"
-                action = :store_true
             "-T","--time"
                 required = true
                 arg_type = Float64
