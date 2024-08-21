@@ -39,7 +39,7 @@ if true; then
 		{
 				for T in `seq 0 5 500`; do
 						echo -n "$T "
-						./realtime -T $T -s 10 --skip 1 $scolddat
+						./realtime -T $T -s 10 --skip 1 $scolddat --scale 1000
 				done
 		} > rt-bounds-scalar-cold
 fi

@@ -150,6 +150,10 @@ function main()
                 required = false
                 default = 1
                 arg_type = Int
+            "--scale"
+                help = "Scaling hack for numerical stability"
+                default = 1.0
+                arg_type = Float64
             "-V","--verbose"
                 action = :store_true
             "correlator"
@@ -158,13 +162,16 @@ function main()
         end
         parse_args(s)
     end
+    scale = args["scale"]
+    verbose = args["verbose"]
+
     cors = let
         open(args["correlator"]) do f
             cors = Vector{Vector{RealT}}()
             for l in readlines(f)
                 v = eval(Meta.parse(l))
                 if !isnothing(v)
-                    push!(cors, v)
+                    push!(cors, scale * v)
                 end
             end
             cors
@@ -172,7 +179,6 @@ function main()
     end
     # Skip
     cors = cors[1:args["skip"]:end]
-    verbose = args["verbose"]
    
     σ = args["sigma"]
     T = args["time"]
@@ -181,7 +187,7 @@ function main()
     phi = CorrelatorProgram(p, t=T, sgn=-1.0)
     lo, ylo = solve(plo; verbose=verbose)
     hi, yhi = solve(phi; verbose=verbose)
-    println("$(-lo) $hi")
+    println("$(-lo/scale) $(hi/scale)")
 end
 
 main()
