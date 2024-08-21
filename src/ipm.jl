@@ -17,9 +17,9 @@ function feasible(p, y)::Bool
     return ok
 end
 
-function barrier!(g, p, y::Vector{Float64})::Float64
+function barrier!(g, p, y)
     N = length(g)
-    r::Float64 = 0.
+    r = 0.
     g .= 0.
     constraints!(p, y) do f,g′
         if f ≤ 0
@@ -67,7 +67,7 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
     end
 end
 
-function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Float64}
+function feasible_initial(prog::ConvexProgram; verbose::Bool=false)
     if verbose
         println(stderr, "Finding feasible initial point...")
     end

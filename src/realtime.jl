@@ -1,4 +1,5 @@
 using ArgParse
+using DoubleFloats
 using LinearAlgebra
 using Random: rand, randn, rand!, randn!
 using Statistics: mean, cov
@@ -6,15 +7,17 @@ using Statistics: mean, cov
 using SCAMP
 import SCAMP: initial, constraints!, objective!
 
+RealT = Float64
+
 #const dω = 0.02
 #const Ω = 20.0
-const dω = 0.001
-const Ω = 1.0
+const dω = RealT(0.001)
+const Ω = RealT(1.0)
 const ωs = dω:dω:Ω
 
-function resample(f, x; K=1000)::Vector{Float64}
+function resample(f, x; K=1000)::Vector{RealT}
     N = length(x)
-    fs = zeros(K)
+    fs = zeros(RealT, K)
     for k in 1:K
         fs[k] = f(rand(x,N))
     end
@@ -22,43 +25,36 @@ function resample(f, x; K=1000)::Vector{Float64}
 end
 
 struct CorrelatorProgram <: ConvexProgram
-    β::Float64
-    τ::Vector{Float64}
-    C::Vector{Float64}
-    M::Matrix{Float64}
-    Minv::Matrix{Float64}
-    t::Float64
-    σ::Float64
+    β::RealT
+    τ::Vector{RealT}
+    C::Vector{RealT}
+    M::Matrix{RealT}
+    Minv::Matrix{RealT}
+    t::RealT
+    σ::RealT
     sgn::Float64
 
-    function CorrelatorProgram(Cs, t::Float64, σ::Float64, sgn::Float64; p::Float64=0.01)::CorrelatorProgram
+    function CorrelatorProgram(Cs, t::RealT, σ::RealT, sgn::Float64; p::RealT=RealT(0.01))::CorrelatorProgram
         N = length(Cs)
         C = mean(Cs)
         β = length(C)
 
         # First extract the covariance matrix.
         K = 1000
-        cors = zeros((K,β))
+        cors = zeros(RealT, (K,β))
         for k in 1:K
             cors[k,:] = mean(rand(Cs,N))
         end
         Σ = cov(cors)
         # Regulate.
-        maxeig = maximum(eigvals(Σ))
+        maxeig = maximum(real(eigvals(Σ)))
         for i in 1:β
             Σ[i,i] += 1e-6 * maxeig
         end
 
-        τ = collect(1:Float64(β))
+        τ = collect(1:RealT(β))
         K = 1000
-        if false
-            M = zeros((β,β))
-            for n in 1:β
-                M[n,n] = 1.0
-            end
-        else
-            M = inv(Σ)
-        end
+        M = inv(Σ)
         xs = resample(Cs; K=K) do Cs
             C′ = mean(Cs)
             # TODO reconstruct M from this resampling (think about this)
@@ -69,19 +65,19 @@ struct CorrelatorProgram <: ConvexProgram
         x = xs[round(Int,(1-p)*K)]
         M ./= x
         Minv = inv(M)
-        new(Float64(β), τ, C, M, Minv, t, σ, sgn)
+        new(RealT(β), τ, C, M, Minv, t, σ, sgn)
     end
 
-    function CorrelatorProgram(p::CorrelatorProgram; t::Float64, sgn::Float64)::CorrelatorProgram
+    function CorrelatorProgram(p::CorrelatorProgram; t::RealT, sgn::Float64)::CorrelatorProgram
         new(p.β, p.τ, p.C, p.M, p.Minv, t, p.σ, sgn)
     end
 end
 
-function initial(p::CorrelatorProgram)::Vector{Float64}
-    return rand(length(p.τ)+1)
+function initial(p::CorrelatorProgram)::Vector{RealT}
+    return rand(RealT, length(p.τ)+1)
 end
 
-function objective!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
+function objective!(g, p::CorrelatorProgram, y::Vector{RealT})::RealT
     # Unpack
     μ, ℓ = y[1], @view(y[2:end])
     g .= 0.0
@@ -108,7 +104,7 @@ function objective!(g, p::CorrelatorProgram, y::Vector{Float64})::Float64
     return r
 end
 
-function constraints!(cb, p::CorrelatorProgram, y::Vector{Float64})
+function constraints!(cb, p::CorrelatorProgram, y::Vector{RealT})
     dλ = zero(y)
     for ω in dω:dω:Ω
         λ = λ!(dλ, p, y, ω)
@@ -121,7 +117,7 @@ function constraints!(cb, p::CorrelatorProgram, y::Vector{Float64})
     cb(μ, dμ)
 end
 
-function λ!(g::Vector{Float64}, p::CorrelatorProgram, y::Vector{Float64}, ω::Float64)::Float64
+function λ!(g::Vector{RealT}, p::CorrelatorProgram, y::Vector{RealT}, ω::RealT)::RealT
     g .= 0.0
     μ = y[1]
 
@@ -145,11 +141,11 @@ function main()
         @add_arg_table s begin
             "-T","--time"
                 required = true
-                arg_type = Float64
+                arg_type = RealT
             "-s","--sigma"
                 required = false
                 default = 1.0
-                arg_type = Float64
+                arg_type = RealT
             "--skip"
                 required = false
                 default = 1
@@ -164,7 +160,7 @@ function main()
     end
     cors = let
         open(args["correlator"]) do f
-            cors = Vector{Vector{Float64}}()
+            cors = Vector{Vector{RealT}}()
             for l in readlines(f)
                 v = eval(Meta.parse(l))
                 if !isnothing(v)
@@ -180,7 +176,7 @@ function main()
    
     σ = args["sigma"]
     T = args["time"]
-    p = CorrelatorProgram(cors, 0.0, σ, 1.0)
+    p = CorrelatorProgram(cors, RealT(0.0), σ, 1.0)
     plo = CorrelatorProgram(p, t=T, sgn=1.0)
     phi = CorrelatorProgram(p, t=T, sgn=-1.0)
     lo, ylo = solve(plo; verbose=verbose)
