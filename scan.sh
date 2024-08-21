@@ -37,7 +37,7 @@ fi
 
 if true; then
 		{
-				for T in `seq 0 5 200`; do
+				for T in `seq 0 5 500`; do
 						echo -n "$T "
 						./realtime -T $T -s 10 --skip 1 $scolddat
 				done

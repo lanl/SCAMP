@@ -11,12 +11,12 @@ using LinearAlgebra
 struct GradientDescent
 end
 
-function (gd::GradientDescent)(f!, y::Vector{Float64})::Float64
+function (gd::GradientDescent)(f!, y::Vector{T})::T where {T}
     N = length(y)
     δ = 1e-1
-    ∇::Vector{Float64} = zero(y)
-    ∇′::Vector{Float64} = zero(y)
-    y′::Vector{Float64} = zero(y)
+    ∇::Vector{T} = zero(y)
+    ∇′::Vector{T} = zero(y)
+    y′::Vector{T} = zero(y)
     for step in 1:500
         r₀ = f!(∇′, y)
         for k in 1:100
@@ -110,8 +110,8 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
     y′::Vector{Float64} = zero(y)
 
     α = 1.
-    αmin = 1e-10
-    δmin = 1e-10
+    αmin = 1e-12
+    δmin = 1e-12
 
     # Initial guess of inverse Hessian (just guess the identity).
     H = zeros(Float64, (N,N))
