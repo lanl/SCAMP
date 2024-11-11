@@ -151,9 +151,11 @@ function initial(p::Phase1)::Vector{Float64}
     return y
 end
 
-function objective!(g, p::Phase1, y::Vector{Float64})::Float64
-    g[1] = 1.
-    g[2:end] .= 0.
+function objective!(g, h, p::Phase1, y::Vector{Float64})::Float64
+    if !isnothing(g)
+        g[1] = 1.
+        g[2:end] .= 0.
+    end
     return y[1]
 end
 
@@ -269,7 +271,7 @@ function solve_bfgs(prog::ConvexProgram, y; verbose::Bool=false, early=nothing):
             else
                 gobj, gbar = zero(g), zero(g)
             end
-            obj = objective!(gobj, prog, y)
+            obj = objective!(gobj, nothing, prog, y)
             bar = barrier!(gbar, nothing, prog, y)
             r = obj + bar/t
             if !isnothing(g)
@@ -279,7 +281,7 @@ function solve_bfgs(prog::ConvexProgram, y; verbose::Bool=false, early=nothing):
             end
             return r
         end
-        obj = objective!(g, prog, y)
+        obj = objective!(g, nothing, prog, y)
         if verbose
             println(stderr, t, " ", v, "   ", obj)
         end
@@ -293,7 +295,7 @@ function solve_bfgs(prog::ConvexProgram, y; verbose::Bool=false, early=nothing):
         #H .*= μ  # This does not help.
     end
 
-    return objective!(g, prog, y), y
+    return objective!(g, nothing, prog, y), y
 end
 
 function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
@@ -303,6 +305,8 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
 
     N = length(y)
     g = zero(y)
+    hobj = zeros(Float64, (N,N))
+    hbar = zeros(Float64, (N,N))
 
     μ = 2
     ϵ = 1e-10
@@ -316,21 +320,21 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
                 return Inf
             end
             gobj, gbar = zero(g), zero(g)
-            obj = objective!(gobj, prog, y)
-            bar = barrier!(gbar, h, prog, y)
+            obj = objective!(gobj, hobj, prog, y)
+            bar = barrier!(gbar, hbar, prog, y)
             r = obj + bar/t
             @. g = gobj + gbar/t
-            h ./= t
+            @. h = hobj + hbar/t
             return r
         end
-        obj = objective!(g, prog, y)
+        obj = objective!(nothing, nothing, prog, y)
         if verbose
             println(stderr, t, " ", v, "   ", obj)
         end
         t = μ*t
     end
 
-    return objective!(g, prog, y), y
+    return objective!(nothing, nothing, prog, y), y
 end
 
 function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}

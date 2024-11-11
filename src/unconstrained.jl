@@ -2,7 +2,7 @@
 
 module UnconstrainedOptimization
 
-export GradientDescent, LineSearch, BFGS
+export GradientDescent, LineSearch, BFGS, Newton
 export minimize!
 
 using LinearAlgebra

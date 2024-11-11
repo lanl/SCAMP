@@ -55,8 +55,11 @@ function check_gradients(f, y, g, h; verbose=false)::Bool
             if verbose
                 println(stderr, "Hessian ($i,$j) mismatch:   $hij   vs   $(h[i,j])")
             end
-            return false
+            bad = true
         end
+    end
+    if bad
+        return false
     end
     if verbose
         printstyled("Hessian matches!\n", color=:green, bold=true)

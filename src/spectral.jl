@@ -132,6 +132,9 @@ function objective!(g, h, p::SpectralProgram, y::Vector{Float64})::Float64
     if !isnothing(g)
         g .*= -1
     end
+    if !isnothing(h)
+        h .*= -1
+    end
     return r
 end
 
