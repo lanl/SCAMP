@@ -282,15 +282,14 @@ function main()
     end
 
     σ = args["sigma"]
-    ω = args["omega"]
     if !isnothing(args["beta"])
         β = Float64(args["beta"])
     else
         β = Float64(length(τs))
     end
-    p = SpectralProgram(β, τs, cors, ω, σ, 1.0)
 
     if false
+        p = SpectralProgram(β, τs, cors, 0.3, σ, 1.0)
         # Check gradients and Hessians
         y = SCAMP.IPM.feasible_initial(p)
         g = zero(y)
@@ -309,6 +308,7 @@ function main()
     end
 
     if args["profile"]
+        plo = SpectralProgram(β, τs, cors, 0.3, σ, 1.0)
         @profile solve(plo; verbose=false)
         open("prof-flat", "w") do f
             Profile.print(f, format=:flat, sortedby=:count)
@@ -319,11 +319,14 @@ function main()
         return
     end
 
-    plo = SpectralProgram(p, ω=ω, sgn=1.0)
-    phi = SpectralProgram(p, ω=ω, sgn=-1.0)
-    lo, ylo = solve(plo; verbose=false)
-    hi, yhi = solve(phi; verbose=false)
-    println("$(-lo) $hi")
+    p = SpectralProgram(β, τs, cors, 0.0, σ, 1.0)
+    for ω in LinRange(0,args["omega"],101)
+        plo = SpectralProgram(p, ω=ω, sgn=1.0)
+        phi = SpectralProgram(p, ω=ω, sgn=-1.0)
+        lo, ylo = solve(plo; verbose=false)
+        hi, yhi = solve(phi; verbose=false)
+        println("$ω $(-lo) $hi")
+    end
     return
 end
 
