@@ -187,8 +187,57 @@ end
 struct LBFGS
 end
 
-function minimize!(f!, alg, y::Vector{T})::T where {T<:Real}
-    return alg()(f!, y)
+struct Newton
+end
+
+function (newton::Newton)(f!, y::Vector{Float64})::Float64
+    N = length(y)
+    y′ = zero(y)
+    g = zeros(Float64, N)
+    h = zeros(Float64, (N,N))
+    v::Float64 = f!(g, h, y)
+    nsteps = 0
+    while true
+        if false
+            F = eigen(Symmetric(h))
+            F.values .+= 1e-13 * maximum(F.values)
+            F.values .+= 1e-50
+            hinv = inv(F)
+            dy = -hinv * g
+        end
+        dy = -h \ g
+
+        # Termination
+        #δ = -(g' * hinv * g) / 4
+        δ = (g ⋅ dy) / 4
+        if norm(dy) < 1e-10 || abs(δ) / abs(v) < 1e-10
+            break
+        end
+
+        # Backtracking line search
+        α = 1.0
+        m = g ⋅ dy
+        @. y′ = y + α * dy
+        v′ = f!(g, h, y′)
+        while v′ > v + 0.5 * α * m && α > 1e-30
+            α *= 0.5
+            @. y′ = y + α * dy
+            v′ = f!(g, h, y′)
+        end
+        v = v′
+        @. y = y′
+
+        if α < 1e-30
+            break
+        end
+
+        nsteps += 1
+    end
+    return v
+end
+
+function minimize!(f!, alg, y::Vector{T}; kwargs...)::T where {T<:Real}
+    return alg()(f!, y; kwargs...)
 end
 
 end

@@ -2,17 +2,18 @@
 
 using ArgParse
 using LinearAlgebra
+using Profile
 using Random: rand, randn, rand!, randn!
 using SpecialFunctions: erf
 using Statistics: mean, cov
 
 using SCAMP
+using SCAMP.Utilities: check_gradients
 import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.0001
 const dω = 0.001
-const Ω = 0.5
-const ωs = dω:dω:Ω
+const Ω = 1.5
 
 function resample(f, x; K=1000)::Vector{Float64}
     N = length(x)
@@ -33,37 +34,42 @@ struct SpectralProgram <: ConvexProgram
     σ::Float64
     sgn::Float64
 
-    function SpectralProgram(Cs, ω::Float64, σ::Float64, sgn::Float64; p::Float64=0.01)::SpectralProgram
+    function SpectralProgram(β::Float64, τ::Vector{Float64}, Cs, ω::Float64, σ::Float64, sgn::Float64, p::Float64=0.01)::SpectralProgram
         N = length(Cs)
         C = mean(Cs)
-        β = length(C)
+        B = length(τ)
+        @assert B == length(C)
 
         # First extract the covariance matrix.
-        K = 1000
-        cors = zeros((K,β))
-        for k in 1:K
-            cors[k,:] = mean(rand(Cs,N))
-        end
-        Σ = cov(cors)
-        # Regulate.
-        maxeig = maximum(eigvals(Σ))
-        for i in 1:β
-            Σ[i,i] += 1e-6 * maxeig
+        Σ = let
+            K = 1000
+            cors = zeros((K,B))
+            for k in 1:K
+                cors[k,:] = mean(rand(Cs,N))
+            end
+            Σ = cov(cors)
+            # Regulate
+            maxeig = maximum(eigvals(Σ))
+            Σ += 1e-6 * I
+            Σ
         end
 
-        τ = collect(1:Float64(β))
-        K = 1000
-        M = inv(Σ)
-        xs = resample(Cs; K=K) do Cs
-            C′ = mean(Cs)
-            # TODO reconstruct M from this resampling (think about this)
-            v = C′ - C
-            return v' * M * v
+        # Define (1-p)% confidence region.
+        M, Minv = let
+            K = 1000
+            M = inv(Σ)
+            xs = resample(Cs; K=K) do Cs
+                C′ = mean(Cs)
+                v = C′ - C
+                return v' * M * v
+            end
+            sort!(xs)
+            x = xs[round(Int,(1-p)*K)]
+            M ./= x
+            Minv = inv(M)
+            M, Minv
         end
-        sort!(xs)
-        x = xs[round(Int,(1-p)*K)]
-        M ./= x
-        Minv = inv(M)
+
         new(Float64(β), τ, C, M, Minv, ω, σ, sgn)
     end
 
@@ -76,10 +82,11 @@ function initial(p::SpectralProgram)::Vector{Float64}
     return rand(length(p.τ)+1)
 end
 
-function objective!(g, p::SpectralProgram, y::Vector{Float64})::Float64
+function objective!(g, h, p::SpectralProgram, y::Vector{Float64})::Float64
     # Unpack
     μ, ℓ = y[1], @view(y[2:end])
     g .= 0.0
+    h .= 0.0
     r = 0.0
 
     # Constant (in ℓ) piece.
@@ -92,8 +99,13 @@ function objective!(g, p::SpectralProgram, y::Vector{Float64})::Float64
     g[1] += ℓMinvℓ / (4 * μ^2)
     gℓ = -2 * p.Minv * ℓ / (4*μ)
     g[2:end] .= gℓ
+    # Hessian of inversion piece
+    h[2:end,2:end] += -2*p.Minv / (4*μ)
+    h[1,1] += -2 * ℓMinvℓ / (4 * μ^3)
+    h[1,2:end] += 2 * p.Minv * ℓ / (4*μ^2)
+    h[2:end,1] .= h[1,2:end]
 
-    # Inner product, and gradients
+    # Inner product, and gradients (no Hessian)
     g[2:end] .+= p.C
     r += p.C' * ℓ
 
@@ -108,7 +120,7 @@ function constraints!(cb, p::SpectralProgram, y::Vector{Float64})
     for ω in dω:dω:Ω
         λ = λ!(dλ, p, y, ω)
         dλ .*= dω
-        cb(dω*λ, dλ)
+        cb(dω*λ, dλ, 0)
     end
     dμ = zero(y)
     dμ[1] = 1.0
@@ -146,50 +158,149 @@ function main()
             "--omega"
                 required = true
                 arg_type = Float64
-            "-s","--sigma"
+            "--sigma"
                 required = true
                 default = 1.0
                 arg_type = Float64
+            "--beta"
+                required = false
+                arg_type = Int
             "--skip"
                 required = false
                 default = 1
                 arg_type = Int
+            "--format"
+                required = false
+                default = :lists
+                arg_type = Symbol
+                help = "Input format"
+            "--scale"
+                required = false
+                default = 1.0
+                arg_type = Float64
+            "--min-tau"
+                required = false
+                default = 0
+                arg_type = Float64
+            "--profile"
+                action = :store_true
             "correlator"
                 required = true
                 arg_type = String
         end
         parse_args(s)
     end
-    cors = let
-        open(args["correlator"]) do f
-            cors = Vector{Vector{Float64}}()
-            for l in readlines(f)
-                v = eval(Meta.parse(l))
-                if !isnothing(v)
-                    push!(cors, v)
+    τs, cors = if args["format"] == :lists
+        cors = let
+            open(args["correlator"]) do f
+                cors = Vector{Vector{Float64}}()
+                for l in readlines(f)
+                    v = eval(Meta.parse(l))
+                    if !isnothing(v)
+                        push!(cors, v)
+                    end
                 end
+                cors
             end
-            cors
+        end
+        # Skip
+        cors = cors[1:args["skip"]:end]
+        τ = collect(1:length(cors[1]))
+        τ, cors
+    elseif args["format"] == :long
+        open(args["correlator"]) do f
+            Nstr, Kstr = split(readline(f))
+            N, K = parse(Int, Nstr), parse(Int, Kstr)
+            τ = zeros(Float64, K)
+            cors = Vector{Vector{Float64}}()
+            for n in 1:N
+                c = zeros(Float64, K)
+                for k in 1:K
+                    l = readline(f)
+                    τstr, rstr, istr = split(l)
+                    τ[k] = parse(Int, τstr)
+                    cor_r = parse(Float64, rstr)
+                    cor_i = parse(Float64, istr)
+                    c[k] = cor_r * args["scale"]
+                end
+                push!(cors, c)
+            end
+            τ, cors
         end
     end
-    # Skip
-    cors = cors[1:args["skip"]:end]
+
+    N = length(cors)
+    # Apply minimum value of τ
+    K, τs, cors = let
+        K′::Int = sum(τs .>= args["min-tau"])
+        τs′ = zeros(Float64, K′)
+        cors′ = Vector{Vector{Float64}}()
+
+        k′ = 1
+        for k in 1:K
+            if τs[k] ≥ args["min-tau"]
+                τs′[k′] = τs[k]
+                k′ += 1
+            end
+        end
+
+        for n in 1:N
+            k′ = 1
+            c = zeros(Float64, K′)
+            for k in 1:K
+                if τs[k] ≥ args["min-tau"]
+                    c[k′] = cors[n][k]
+                    k′ += 1
+                end
+            end
+            push!(cors′, c)
+        end
+        K′, τs′, cors′
+    end
 
     σ = args["sigma"]
     ω = args["omega"]
-    p = SpectralProgram(cors, 0.0, σ, 1.0)
+    if !isnothing(args["beta"])
+        β = Float64(args["beta"])
+    else
+        β = Float64(length(τs))
+    end
+    p = SpectralProgram(β, τs, cors, ω, σ, 1.0)
+
+    if true
+        # Check gradients and Hessians
+        y = CONCAVE.IPM.feasible_initial(p)
+        g = zero(y)
+        h = zeros(Float64, (length(y),length(y)))
+        # Objective gradients.
+        CONCAVE.IPM.objective!(g, plo, y)
+        @assert check_gradients(y, g, nothing; verbose=true) do y
+            CONCAVE.IPM.objective!(nothing, plo, y)
+        end
+        # Barrier gradients.
+        CONCAVE.IPM.barrier!(g, h, plo, y)
+        @assert check_gradients(y, g, nothing; verbose=true) do y
+            CONCAVE.IPM.barrier!(nothing, nothing, plo, y)
+        end
+        return
+    end
+
+    if args["profile"]
+        @profile solve(plo; verbose=false)
+        open("prof-flat", "w") do f
+            Profile.print(f, format=:flat, sortedby=:count)
+        end
+        open("prof-tree", "w") do f
+            Profile.print(f, noisefloor=2.0)
+        end
+        return
+    end
+
     plo = SpectralProgram(p, ω=ω, sgn=1.0)
     phi = SpectralProgram(p, ω=ω, sgn=-1.0)
     lo, ylo = solve(plo; verbose=false)
     hi, yhi = solve(phi; verbose=false)
     println("$(-lo) $hi")
-    if false
-        for ω in ωs
-            dλ = zero(ylo)
-            λ = λ!(dλ, plo, ylo, ω)
-            println("$ω, $λ")
-        end
-    end
     return
 end
 
