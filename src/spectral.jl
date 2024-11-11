@@ -7,6 +7,8 @@ using Random: rand, randn, rand!, randn!
 using SpecialFunctions: erf
 using Statistics: mean, cov
 
+import Base: size
+
 using SCAMP
 using SCAMP.Utilities: check_gradients
 import SCAMP: initial, constraints!, objective!
@@ -82,36 +84,54 @@ function initial(p::SpectralProgram)::Vector{Float64}
     return rand(length(p.τ)+1)
 end
 
+function size(p::SpectralProgram)::Int
+    return length(p.τ)+1
+end
+
 function objective!(g, h, p::SpectralProgram, y::Vector{Float64})::Float64
     # Unpack
     μ, ℓ = y[1], @view(y[2:end])
-    g .= 0.0
-    h .= 0.0
+    if !isnothing(g)
+        g .= 0.0
+    end
+    if !isnothing(h)
+        h .= 0.0
+    end
     r = 0.0
 
     # Constant (in ℓ) piece.
-    g[1] = -1.0
-    r += μ * g[1]
+    if !isnothing(g)
+        g[1] = -1.0
+    end
+    r += -μ
 
     # Inversion piece, and gradients
     ℓMinvℓ = (ℓ' * p.Minv * ℓ)
     r += -1 * ℓMinvℓ / (4 * μ)
-    g[1] += ℓMinvℓ / (4 * μ^2)
     gℓ = -2 * p.Minv * ℓ / (4*μ)
-    g[2:end] .= gℓ
+    if !isnothing(g)
+        g[1] += ℓMinvℓ / (4 * μ^2)
+        g[2:end] .= gℓ
+    end
     # Hessian of inversion piece
-    h[2:end,2:end] += -2*p.Minv / (4*μ)
-    h[1,1] += -2 * ℓMinvℓ / (4 * μ^3)
-    h[1,2:end] += 2 * p.Minv * ℓ / (4*μ^2)
-    h[2:end,1] .= h[1,2:end]
+    if !isnothing(h)
+        h[2:end,2:end] += -2*p.Minv / (4*μ)
+        h[1,1] += -2 * ℓMinvℓ / (4 * μ^3)
+        h[1,2:end] += 2 * p.Minv * ℓ / (4*μ^2)
+        h[2:end,1] .= h[1,2:end]
+    end
 
     # Inner product, and gradients (no Hessian)
-    g[2:end] .+= p.C
+    if !isnothing(g)
+        g[2:end] .+= p.C
+    end
     r += p.C' * ℓ
 
     # We're maximizing, not minimizing.
     r *= -1
-    g .*= -1
+    if !isnothing(g)
+        g .*= -1
+    end
     return r
 end
 
@@ -125,7 +145,7 @@ function constraints!(cb, p::SpectralProgram, y::Vector{Float64})
     dμ = zero(y)
     dμ[1] = 1.0
     μ = y[1]
-    cb(μ, dμ)
+    cb(μ, dμ, 0)
 end
 
 function Φ(x::Float64)
@@ -267,20 +287,20 @@ function main()
     end
     p = SpectralProgram(β, τs, cors, ω, σ, 1.0)
 
-    if true
+    if false
         # Check gradients and Hessians
-        y = CONCAVE.IPM.feasible_initial(p)
+        y = SCAMP.IPM.feasible_initial(p)
         g = zero(y)
         h = zeros(Float64, (length(y),length(y)))
         # Objective gradients.
-        CONCAVE.IPM.objective!(g, plo, y)
-        @assert check_gradients(y, g, nothing; verbose=true) do y
-            CONCAVE.IPM.objective!(nothing, plo, y)
+        SCAMP.IPM.objective!(g, h, p, y)
+        @assert check_gradients(y, g, h; verbose=true) do y
+            SCAMP.IPM.objective!(nothing, nothing, p, y)
         end
         # Barrier gradients.
-        CONCAVE.IPM.barrier!(g, h, plo, y)
-        @assert check_gradients(y, g, nothing; verbose=true) do y
-            CONCAVE.IPM.barrier!(nothing, nothing, plo, y)
+        SCAMP.IPM.barrier!(g, h, p, y)
+        @assert check_gradients(y, g, h; verbose=true) do y
+            SCAMP.IPM.barrier!(nothing, nothing, p, y)
         end
         return
     end

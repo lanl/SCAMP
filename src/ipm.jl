@@ -1,5 +1,9 @@
 module IPM
 
+using LinearAlgebra
+
+import Base: size
+
 using ..Programs
 using ..UnconstrainedOptimization
 
@@ -194,7 +198,23 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
         if !isnothing(g)
             g .= 0.0
         end
-        constraints!(prog, y) do M,D,H
+
+        function cb(f::Real,D,H)
+            if !isfinite(f)
+                r = Inf
+                return
+            end
+            if f ≤ 0
+                r -= f
+                if !isnothing(g)
+                    for n in 1:N
+                        g[n] -= D[n]
+                    end
+                end
+            end
+        end
+
+        function cb(M::Matrix,D,H)
             if any(isinf.(M)) || any(isnan.(M))
                 r = Inf
                 return
@@ -211,6 +231,8 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
                 end
             end
         end
+
+        constraints!(cb, prog, y)
         return r
     end
 

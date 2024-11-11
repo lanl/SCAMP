@@ -3,7 +3,7 @@ module Utilities
 using Printf
 
 function check_gradients(f, y, g, h; verbose=false)::Bool
-    ϵ = 1e-5
+    ϵ = 1e-6
     N = length(y)
     @assert size(g) == (N,)
     for n in 1:N
