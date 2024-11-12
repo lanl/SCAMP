@@ -14,7 +14,11 @@ with open(sys.argv[1]) as f:
             c[n,k] = cr
             t[k] = tau
 
+plt.figure(figsize=(6,4), dpi=300)
 plt.errorbar(t, np.mean(c,axis=0), yerr=np.std(c,axis=0)/np.sqrt(N))
 plt.yscale('log')
-plt.show()
+plt.ylabel('Nucleon correlator')
+plt.xlabel('(Imaginary) time separation')
+plt.tight_layout()
+plt.savefig('correlator.png')
 

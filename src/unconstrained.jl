@@ -210,7 +210,7 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
         # Termination
         #δ = -(g' * hinv * g) / 4
         δ = (g ⋅ dy) / 4
-        if norm(dy) < 1e-10 || abs(δ) / abs(v) < 1e-10
+        if norm(dy) < 1e-12 || abs(δ) / abs(v) < 1e-12
             break
         end
 
