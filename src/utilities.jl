@@ -3,7 +3,7 @@ module Utilities
 using Printf
 
 function check_gradients(f, y, g, h; verbose=false)::Bool
-    ϵ = 1e-6
+    ϵ = 1e-8
     N = length(y)
     @assert size(g) == (N,)
     for n in 1:N
@@ -51,6 +51,7 @@ function check_gradients(f, y, g, h; verbose=false)::Bool
         g₊ = (x₊₊ - x₊₋) / (2*ϵ)
         g₋ = (x₋₊ - x₋₋) / (2*ϵ)
         hij = (g₊ - g₋)/(2*ϵ)
+        println("$hij   $(h[i,j])")
         if abs(hij - h[i,j]) / (maximum(abs.(h)) + abs(hij) + sqrt(ϵ)) > ϵ^(1/3)
             if verbose
                 println(stderr, "Hessian ($i,$j) mismatch:   $hij   vs   $(h[i,j])")

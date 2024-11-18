@@ -1,6 +1,7 @@
 module IPM
 
 using LinearAlgebra
+using Quadmath
 
 import Base: size
 
@@ -29,9 +30,9 @@ function feasible(p, y)::Bool
     return ok
 end
 
-function barrier!(g, h, p, y::Vector{Float64})::Float64
+function barrier!(g, h, p, y::Vector{Float128})::Float128
     N = length(y)
-    r::Float64 = 0.
+    r::Float128 = 0.
     if !isnothing(g)
         g .= 0.
     end
@@ -105,14 +106,14 @@ function barrier!(g, h, p, y::Vector{Float64})::Float64
         end
         if r < Inf
             r += -log(f)
+            finv = f^(-1)
+            d .*= finv
             if !isnothing(g)
-                for n in 1:N
-                    g[n] -= d[n]/f
-                end
+                g .-= d
             end
             if !isnothing(h)
                 for n in 1:N, m in 1:N
-                    h[n,m] += d[n] * d[m] / f^2
+                    h[n,m] += d[n] * d[m]
                 end
             end
         end
@@ -130,9 +131,9 @@ function size(p::Phase1)
     return 1 + size(p.cp)
 end
 
-function initial(p::Phase1)::Vector{Float64}
+function initial(p::Phase1)::Vector{Float128}
     y′ = initial(p.cp)
-    y = zeros(Float64, 1+length(y′))
+    y = zeros(Float128, 1+length(y′))
     y[2:end] .= y′
     constraints!(p.cp, y′) do f,g
         if f isa Real
@@ -151,7 +152,7 @@ function initial(p::Phase1)::Vector{Float64}
     return y
 end
 
-function objective!(g, h, p::Phase1, y::Vector{Float64})::Float64
+function objective!(g, h, p::Phase1, y::Vector{Float128})::Float128
     if !isnothing(g)
         g[1] = 1.
         g[2:end] .= 0.
@@ -159,14 +160,14 @@ function objective!(g, h, p::Phase1, y::Vector{Float64})::Float64
     return y[1]
 end
 
-function constraints!(cb, p::Phase1, y::Vector{Float64})
+function constraints!(cb, p::Phase1, y::Vector{Float128})
     N = length(y)-1
     s = y[1]
     function fn(M::Matrix, D)
         F = eigen(Hermitian(M))
         f = F.values[1]
         v = F.vectors[:,1]
-        g′ = zeros(Float64, length(D)+1)
+        g′ = zeros(Float128, length(D)+1)
         g′[1] = 1.
         for n in 1:N
             g′[1+n] = real(v' * D[:,:,n] * v)
@@ -175,7 +176,7 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
     end
 
     function fn(f::Real, d)
-        g = zeros(Float64, length(d)+1)
+        g = zeros(Float128, length(d)+1)
         g[1] = 1.
         for n in 1:N
             g[1+n] = d[n]
@@ -186,7 +187,7 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
     constraints!(fn, p.cp, y[2:end])
 end
 
-function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Float64}
+function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Float128}
     if verbose
         println(stderr, "Finding feasible initial point...")
     end
@@ -196,7 +197,7 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
     g = zero(y)
 
     minimize!(BFGS, y) do g, y
-        r::Float64 = 0.
+        r::Float128 = 0.
         if !isnothing(g)
             g .= 0.0
         end
@@ -245,7 +246,7 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
     return y
 end
 
-function solve_bfgs(prog::ConvexProgram, y; verbose::Bool=false, early=nothing)::Tuple{Float64, Vector{Float64}}
+function solve_bfgs(prog::ConvexProgram, y; verbose::Bool=false, early=nothing)::Tuple{Float128, Vector{Float128}}
     if !feasible(prog, y)
         error("Initial point was not (strictly) feasible")
     end
@@ -258,7 +259,7 @@ function solve_bfgs(prog::ConvexProgram, y; verbose::Bool=false, early=nothing):
     t₀ = 1.0e-6
 
     t = t₀
-    H = zeros(Float64, (N,N))
+    H = zeros(Float128, (N,N))
     H += I
     while t < 1/ϵ
         # Center.
@@ -298,19 +299,19 @@ function solve_bfgs(prog::ConvexProgram, y; verbose::Bool=false, early=nothing):
     return objective!(g, nothing, prog, y), y
 end
 
-function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
+function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float128, Vector{Float128}}
     if !feasible(prog, y)
         error("Initial point was not (strictly) feasible")
     end
 
     N = length(y)
     g = zero(y)
-    hobj = zeros(Float64, (N,N))
-    hbar = zeros(Float64, (N,N))
+    hobj = zeros(Float128, (N,N))
+    hbar = zeros(Float128, (N,N))
 
     μ = 2
-    ϵ = 1e-10
-    t₀ = 1.0e-2
+    ϵ::Float128 = 1e-10
+    t₀::Float128 = 1.0e-2
 
     t = t₀
     while t < 1/ϵ
@@ -337,7 +338,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
     return objective!(nothing, nothing, prog, y), y
 end
 
-function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
+function solve(prog::ConvexProgram; verbose::Bool=false)::Tuple{Float128, Vector{Float128}}
     if verbose
         println(stderr, "Solving $(typeof(prog))")
     end

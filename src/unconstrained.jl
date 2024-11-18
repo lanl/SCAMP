@@ -6,6 +6,7 @@ export GradientDescent, LineSearch, BFGS, Newton
 export minimize!
 
 using LinearAlgebra
+using Quadmath
 
 # Naive gradient descent
 struct GradientDescent
@@ -44,8 +45,8 @@ end
 
 # Gradient descent with line search
 struct LineSearch
-    α₀::Float64
-    ϵ::Float64
+    α₀::Float128
+    ϵ::Float128
 end
 
 function LineSearch()
@@ -190,46 +191,37 @@ end
 struct Newton
 end
 
-function (newton::Newton)(f!, y::Vector{Float64})::Float64
+function (newton::Newton)(f!, y::Vector{Float128})::Float128
     N = length(y)
     y′ = zero(y)
-    g = zeros(Float64, N)
-    h = zeros(Float64, (N,N))
-    v::Float64 = f!(g, h, y)
+    g = zeros(Float128, N)
+    h = zeros(Float128, (N,N))
+    v::Float128 = f!(g, h, y)
     nsteps = 0
     while true
-        if false
-            F = eigen(Symmetric(h))
-            F.values .+= 1e-13 * maximum(F.values)
-            F.values .+= 1e-50
-            hinv = inv(F)
-            dy = -hinv * g
-        end
         dy = -h \ g
 
         # Termination
         #δ = -(g' * hinv * g) / 4
-        δ = (g ⋅ dy) / 4
-        if norm(dy) < 1e-12 || abs(δ) / abs(v) < 1e-12
-            break
-        end
+        δ = -(g ⋅ dy) / 2
+        #if norm(dy) < 1e-12 || abs(δ) / abs(v) < 1e-12
+        #    break
+        #end
 
         # Backtracking line search
         α = 1.0
-        m = g ⋅ dy
         @. y′ = y + α * dy
         v′ = f!(g, h, y′)
-        while v′ > v + 0.5 * α * m && α > 1e-30
+        while v′ > v && α > 1e-50
             α *= 0.5
             @. y′ = y + α * dy
             v′ = f!(g, h, y′)
         end
-        v = v′
-        @. y = y′
-
-        if α < 1e-30
+        if abs(v-v′) < 1e-22 || abs(v-v′) / abs(v+v′) < 1e-22
             break
         end
+        v = v′
+        @. y = y′
 
         nsteps += 1
     end

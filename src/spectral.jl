@@ -3,7 +3,8 @@
 using ArgParse
 using LinearAlgebra
 using Profile
-using Random: rand, randn, rand!, randn!
+using Quadmath
+using Random: rand, randn, rand!, randn!, seed!
 using SpecialFunctions: erf
 using Statistics: mean, cov
 
@@ -14,10 +15,10 @@ using SCAMP.Utilities: check_gradients
 import SCAMP: initial, constraints!, objective!
 
 #const dω = 0.0001
-const dω = 0.001
-const Ω = 1.5
+const dω::Float128 = 0.001
+const Ω::Float128 = 1.5
 
-function resample(f, x; K=1000)::Vector{Float64}
+function resample(f, x; K=1000)::Vector{Float128}
     N = length(x)
     fs = zeros(K)
     for k in 1:K
@@ -27,16 +28,16 @@ function resample(f, x; K=1000)::Vector{Float64}
 end
 
 struct SpectralProgram <: ConvexProgram
-    β::Float64
-    τ::Vector{Float64}
-    C::Vector{Float64}
-    M::Matrix{Float64}
-    Minv::Matrix{Float64}
-    ω::Float64
-    σ::Float64
-    sgn::Float64
+    β::Float128
+    τ::Vector{Float128}
+    C::Vector{Float128}
+    M::Matrix{Float128}
+    Minv::Matrix{Float128}
+    ω::Float128
+    σ::Float128
+    sgn::Float128
 
-    function SpectralProgram(β::Float64, τ::Vector{Float64}, Cs, ω::Float64, σ::Float64, sgn::Float64, p::Float64=0.01)::SpectralProgram
+    function SpectralProgram(β::Real, τ::Vector{Float128}, Cs, ω::Real, σ::Real, sgn::Real, p::Real=0.01)::SpectralProgram
         N = length(Cs)
         C = mean(Cs)
         B = length(τ)
@@ -52,7 +53,7 @@ struct SpectralProgram <: ConvexProgram
             Σ = cov(cors)
             # Regulate
             maxeig = maximum(eigvals(Σ))
-            Σ += 1e-6 * I
+            Σ += 1e-12 * I
             Σ
         end
 
@@ -72,15 +73,15 @@ struct SpectralProgram <: ConvexProgram
             M, Minv
         end
 
-        new(Float64(β), τ, C, M, Minv, ω, σ, sgn)
+        new(Float128(β), τ, C, M, Minv, ω, σ, sgn)
     end
 
-    function SpectralProgram(p::SpectralProgram; ω::Float64, sgn::Float64)::SpectralProgram
+    function SpectralProgram(p::SpectralProgram; ω::Float128, sgn::Real)::SpectralProgram
         new(p.β, p.τ, p.C, p.M, p.Minv, ω, p.σ, sgn)
     end
 end
 
-function initial(p::SpectralProgram)::Vector{Float64}
+function initial(p::SpectralProgram)::Vector{Float128}
     return rand(length(p.τ)+1)
 end
 
@@ -88,7 +89,7 @@ function size(p::SpectralProgram)::Int
     return length(p.τ)+1
 end
 
-function objective!(g, h, p::SpectralProgram, y::Vector{Float64})::Float64
+function objective!(g, h, p::SpectralProgram, y::Vector{Float128})::Float128
     # Unpack
     μ, ℓ = y[1], @view(y[2:end])
     if !isnothing(g)
@@ -138,7 +139,7 @@ function objective!(g, h, p::SpectralProgram, y::Vector{Float64})::Float64
     return r
 end
 
-function constraints!(cb, p::SpectralProgram, y::Vector{Float64})
+function constraints!(cb, p::SpectralProgram, y::Vector{Float128})
     dλ = zero(y)
     for ω in dω:dω:Ω
         λ = λ!(dλ, p, y, ω)
@@ -151,11 +152,11 @@ function constraints!(cb, p::SpectralProgram, y::Vector{Float64})
     cb(μ, dμ, 0)
 end
 
-function Φ(x::Float64)
+function Φ(x::Float128)
     return (1 + erf(x/sqrt(2)))/2
 end
 
-function λ!(g::Vector{Float64}, p::SpectralProgram, y::Vector{Float64}, ω::Float64)::Float64
+function λ!(g::Vector{Float128}, p::SpectralProgram, y::Vector{Float128}, ω::Float128)::Float128
     g .= 0.0
     μ = y[1]
 
@@ -178,13 +179,16 @@ function main()
     args = let
         s = ArgParseSettings()
         @add_arg_table s begin
+            "--seed"
+                required = false
+                arg_type = Int
             "--omega"
                 required = true
-                arg_type = Float64
+                arg_type = Float128
             "--sigma"
                 required = true
                 default = 1.0
-                arg_type = Float64
+                arg_type = Float128
             "--beta"
                 required = false
                 arg_type = Int
@@ -200,11 +204,11 @@ function main()
             "--scale"
                 required = false
                 default = 1.0
-                arg_type = Float64
+                arg_type = Float128
             "--min-tau"
                 required = false
                 default = 0
-                arg_type = Float64
+                arg_type = Float128
             "--profile"
                 action = :store_true
             "correlator"
@@ -213,10 +217,15 @@ function main()
         end
         parse_args(s)
     end
+
+    if !isnothing(args["seed"])
+        seed!(args["seed"])
+    end
+
     τs, cors = if args["format"] == :lists
         cors = let
             open(args["correlator"]) do f
-                cors = Vector{Vector{Float64}}()
+                cors = Vector{Vector{Float128}}()
                 for l in readlines(f)
                     v = eval(Meta.parse(l))
                     if !isnothing(v)
@@ -234,16 +243,16 @@ function main()
         open(args["correlator"]) do f
             Nstr, Kstr = split(readline(f))
             N, K = parse(Int, Nstr), parse(Int, Kstr)
-            τ = zeros(Float64, K)
-            cors = Vector{Vector{Float64}}()
+            τ = zeros(Float128, K)
+            cors = Vector{Vector{Float128}}()
             for n in 1:N
-                c = zeros(Float64, K)
+                c = zeros(Float128, K)
                 for k in 1:K
                     l = readline(f)
                     τstr, rstr, istr = split(l)
                     τ[k] = parse(Int, τstr)
-                    cor_r = parse(Float64, rstr)
-                    cor_i = parse(Float64, istr)
+                    cor_r = parse(Float128, rstr)
+                    cor_i = parse(Float128, istr)
                     c[k] = cor_r * args["scale"]
                 end
                 push!(cors, c)
@@ -256,8 +265,8 @@ function main()
     # Apply minimum value of τ
     K, τs, cors = let
         K′::Int = sum(τs .>= args["min-tau"])
-        τs′ = zeros(Float64, K′)
-        cors′ = Vector{Vector{Float64}}()
+        τs′ = zeros(Float128, K′)
+        cors′ = Vector{Vector{Float128}}()
 
         k′ = 1
         for k in 1:K
@@ -269,7 +278,7 @@ function main()
 
         for n in 1:N
             k′ = 1
-            c = zeros(Float64, K′)
+            c = zeros(Float128, K′)
             for k in 1:K
                 if τs[k] ≥ args["min-tau"]
                     c[k′] = cors[n][k]
@@ -283,9 +292,9 @@ function main()
 
     σ = args["sigma"]
     if !isnothing(args["beta"])
-        β = Float64(args["beta"])
+        β = Float128(args["beta"])
     else
-        β = Float64(length(τs))
+        β = Float128(length(τs))
     end
 
     if false
@@ -293,7 +302,7 @@ function main()
         # Check gradients and Hessians
         y = SCAMP.IPM.feasible_initial(p)
         g = zero(y)
-        h = zeros(Float64, (length(y),length(y)))
+        h = zeros(Float128, (length(y),length(y)))
         # Objective gradients.
         SCAMP.IPM.objective!(g, h, p, y)
         @assert check_gradients(y, g, h; verbose=true) do y
@@ -320,7 +329,7 @@ function main()
     end
 
     p = SpectralProgram(β, τs, cors, 0.0, σ, 1.0)
-    for ω in LinRange(0,args["omega"],101)
+     for ω in LinRange(0,args["omega"],21)
         plo = SpectralProgram(p, ω=ω, sgn=1.0)
         phi = SpectralProgram(p, ω=ω, sgn=-1.0)
         lo, ylo = solve(plo; verbose=false)
